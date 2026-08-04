@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MovieDetail from './MovieDetail'
-import { reviewsApi } from '../services/api'
+import { ApiError, getToken, reviewsApi, setToken, watchlistApi } from '../services/api'
 import type { Review } from '../services/api'
 import type { MovieDetails } from '../services/tmdb'
 
@@ -42,11 +42,13 @@ vi.mock('../services/tmdb', async (importOriginal) => {
   return { ...actual, getMovieDetails }
 })
 
+/** La ruta /login es un marcador para poder afirmar la navegación. */
 function renderAt(movieId: string) {
   return render(
     <MemoryRouter initialEntries={[`/movie/${movieId}`]}>
       <Routes>
         <Route path="/movie/:id" element={<MovieDetail />} />
+        <Route path="/login" element={<p>pantalla de inicio de sesión</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -88,6 +90,32 @@ describe('MovieDetail', () => {
 
     expect(await screen.findByRole('link', { name: 'Inicia sesión' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Tu reseña')).not.toBeInTheDocument()
+  })
+
+  it('sends the visitor to the login screen instead of failing when saving without a session', async () => {
+    const add = vi.spyOn(watchlistApi, 'add')
+
+    renderAt('550')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Guardar en mi lista' }))
+
+    expect(await screen.findByText('pantalla de inicio de sesión')).toBeInTheDocument()
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('clears an expired token and asks to log in again', async () => {
+    setToken('expired.token.value')
+    vi.spyOn(watchlistApi, 'list').mockResolvedValue([])
+    vi.spyOn(watchlistApi, 'add').mockRejectedValue(
+      new ApiError(401, 'Invalid or expired token'),
+    )
+
+    renderAt('550')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Guardar en mi lista' }))
+
+    expect(await screen.findByText('pantalla de inicio de sesión')).toBeInTheDocument()
+    expect(getToken()).toBeNull()
   })
 
   it('shows an error state when the movie cannot be loaded', async () => {

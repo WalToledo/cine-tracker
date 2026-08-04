@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Bookmark, Check, Clapperboard, ImageOff, Loader2, Star, UserRound } from 'lucide-react'
 import type { SaveState } from '../components/MovieCard'
 import ReviewForm from '../components/ReviewForm'
 import ReviewList from '../components/ReviewList'
 import {
   ApiError,
+  clearToken,
   getCurrentUserId,
   isAuthenticated,
   reviewsApi,
@@ -23,6 +24,8 @@ function formatRuntime(minutes: number): string {
 
 function MovieDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const movieId = Number(id)
   const currentUserId = getCurrentUserId()
 
@@ -31,8 +34,28 @@ function MovieDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewsError, setReviewsError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  /** Lleva al login recordando esta película para volver tras autenticarse. */
+  function goToLogin() {
+    navigate('/login', { state: { from: location.pathname } })
+  }
+
+  /**
+   * Un 401 significa que no hay sesión utilizable (falta el token o caducó):
+   * en lugar de mostrar el mensaje del backend, se descarta y se pide login.
+   */
+  function handleUnauthorized(err: unknown): boolean {
+    if (err instanceof ApiError && err.status === 401) {
+      clearToken()
+      goToLogin()
+      return true
+    }
+
+    return false
+  }
 
   useEffect(() => {
     if (!Number.isInteger(movieId)) {
@@ -91,6 +114,13 @@ function MovieDetail() {
   async function handleSave() {
     if (!movie) return
 
+    // Sin sesión no se intenta la petición: se pide login directamente.
+    if (!isAuthenticated()) {
+      goToLogin()
+      return
+    }
+
+    setSaveError(null)
     setSaveState('saving')
 
     try {
@@ -106,20 +136,35 @@ function MovieDetail() {
         setSaveState('saved')
         return
       }
+
       setSaveState('idle')
-      setReviewsError(err instanceof Error ? err.message : 'No se pudo guardar la película')
+
+      if (handleUnauthorized(err)) return
+
+      setSaveError(err instanceof Error ? err.message : 'No se pudo guardar la película')
     }
   }
 
   async function handleCreateReview(rating: number, content: string) {
-    const created = await reviewsApi.create({ movieId, rating, content })
-    setReviews((current) => [created, ...current])
+    try {
+      const created = await reviewsApi.create({ movieId, rating, content })
+      setReviews((current) => [created, ...current])
+    } catch (err) {
+      // Al redirigir, la página se desmonta y no hay error que mostrar.
+      if (handleUnauthorized(err)) return
+      throw err
+    }
   }
 
   async function handleUpdateReview(reviewId: string, rating: number, content: string) {
-    const updated = await reviewsApi.update(reviewId, { rating, content })
-    setReviews((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-    setEditingId(null)
+    try {
+      const updated = await reviewsApi.update(reviewId, { rating, content })
+      setReviews((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setEditingId(null)
+    } catch (err) {
+      if (handleUnauthorized(err)) return
+      throw err
+    }
   }
 
   async function handleDeleteReview(reviewId: string) {
@@ -129,6 +174,7 @@ function MovieDetail() {
       await reviewsApi.remove(reviewId)
       setReviews((current) => current.filter((item) => item.id !== reviewId))
     } catch (err) {
+      if (handleUnauthorized(err)) return
       setReviewsError(err instanceof Error ? err.message : 'No se pudo eliminar la reseña')
     }
   }
@@ -215,17 +261,27 @@ function MovieDetail() {
               <p className="text-sm leading-relaxed text-neutral-300">{movie.overview}</p>
             )}
 
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saveState !== 'idle'}
-              className="mt-auto flex w-fit items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-neutral-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-400"
-            >
-              {saveState === 'saving' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              {saveState === 'saved' && <Check className="h-4 w-4" aria-hidden="true" />}
-              {saveState === 'idle' && <Bookmark className="h-4 w-4" aria-hidden="true" />}
-              {saveState === 'saved' ? 'En tu lista' : 'Guardar en mi lista'}
-            </button>
+            <div className="mt-auto flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveState !== 'idle'}
+                className="flex w-fit items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-neutral-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-400"
+              >
+                {saveState === 'saving' && (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                )}
+                {saveState === 'saved' && <Check className="h-4 w-4" aria-hidden="true" />}
+                {saveState === 'idle' && <Bookmark className="h-4 w-4" aria-hidden="true" />}
+                {saveState === 'saved' ? 'En tu lista' : 'Guardar en mi lista'}
+              </button>
+
+              {saveError && (
+                <p role="alert" className="w-fit rounded-lg bg-red-950 px-3 py-2 text-sm text-red-300">
+                  {saveError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </header>
