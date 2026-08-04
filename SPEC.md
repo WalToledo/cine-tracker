@@ -21,18 +21,43 @@ cinetracker/
 │   ├── prisma/
 │   ├── src/
 │   │   ├── controllers/
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── review.controller.ts
+│   │   │   └── watchlist.controller.ts
 │   │   ├── middlewares/
 │   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── review.routes.ts
+│   │   │   └── watchlist.routes.ts
 │   │   ├── __tests__/
-│   │   │   └── health.test.ts
+│   │   │   ├── auth.test.ts
+│   │   │   ├── health.test.ts
+│   │   │   ├── reviews.test.ts
+│   │   │   └── watchlist.test.ts
 │   │   ├── app.ts
 │   │   └── index.ts
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
+│   │   │   ├── AuthForm.tsx
+│   │   │   ├── Layout.tsx
+│   │   │   ├── MovieCard.tsx
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── ProtectedRoute.tsx
+│   │   │   ├── ReviewForm.tsx
+│   │   │   ├── ReviewList.tsx
+│   │   │   └── StarRating.tsx
 │   │   ├── pages/
+│   │   │   ├── Home.tsx
+│   │   │   ├── Login.tsx
+│   │   │   ├── MovieDetail.tsx
+│   │   │   ├── MovieDetail.test.tsx
+│   │   │   ├── Register.tsx
+│   │   │   └── Watchlist.tsx
 │   │   ├── services/
+│   │   │   ├── api.ts
+│   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
 │   │   ├── App.tsx
 │   │   └── App.test.tsx
@@ -60,6 +85,7 @@ model User {
   password  String          
   createdAt DateTime        @default(now())
   watchlist WatchlistItem[] 
+  reviews   Review[]        
 }
 
 model WatchlistItem {
@@ -74,6 +100,23 @@ model WatchlistItem {
   updatedAt   DateTime    @updatedAt
 
   @@unique([userId, movieId]) 
+}
+
+/// Una reseña por usuario y película (Step 5). `content` usa `@db.Text` porque el
+/// `String` por defecto en MySQL es `VARCHAR(191)`; `rating` se valida en la
+/// aplicación (entero 1-5) para no migrar por cada cambio de escala.
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  movieId   Int
+  rating    Int      
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, movieId])
+  @@index([movieId])
 }
 
 enum WatchStatus {
@@ -103,9 +146,32 @@ enum WatchStatus {
 - All routes are protected by the `requireAuth` middleware and scoped to `req.user.id`.
 - `POST /api/watchlist` respects the `@@unique([userId, movieId])` constraint (409 on duplicates).
 
-### Step 4: Frontend Core (CURRENT GOAL)
+### Step 4: Frontend Core (COMPLETED)
 - Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
 - Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
 - Build Home page (fetch trending from TMDB; falls back to mock data when `VITE_TMDB_API_KEY` is absent).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
 - `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
+
+### Step 5: Movie Detail Page & Reviews (COMPLETED)
+- New Prisma model `Review` (migration `add_review_model`), related to `User` and to the TMDB `movieId`.
+  `@@unique([userId, movieId])` enforces one review per user and movie; `@@index([movieId])` supports the public listing.
+- Backend `/api/reviews`: `GET /movie/:movieId` is **public**, while `POST /`, `PATCH /:id` and `DELETE /:id` are
+  protected by `requireAuth`. Unlike `watchlist.routes.ts`, the middleware is applied per route instead of via `router.use`.
+- Validation mirrors the watchlist controller: 400 on a non-integer `movieId`, a `rating` outside 1-5 or an empty
+  `content` (max. 2000 chars), **409** when the user already reviewed the movie, and 404 (not 403) for someone else's review.
+- Reviews are public, so the backend never returns the email: it exposes `author: { id, displayName }`, where
+  `displayName` is the local part of the email, derived server-side.
+- Frontend route `/movie/:id` is public (outside `ProtectedRoute`), reachable by clicking a poster or title in
+  Home and in the watchlist. Without a session the review form is replaced by a link to `/login`.
+- `services/tmdb.ts` adds `getMovieDetails()`, which fetches cast, director and trailer in a single request via
+  `append_to_response=credits,videos` (director = `crew.job === 'Director'`, trailer = official YouTube `Trailer`),
+  plus the `profileUrl()` / `backdropUrl()` helpers. Without `VITE_TMDB_API_KEY` it falls back to the mock data.
+- `MovieDetail.tsx` shows the hero (backdrop, poster, runtime, genres, tagline), synopsis, cast grid, embedded
+  YouTube trailer, a "save to watchlist" button and the reviews block. `StarRating.tsx` serves both as input and
+  read-only display; `ReviewForm.tsx` creates and edits; `ReviewList.tsx` only offers Edit/Delete on the user's own review.
+- `getCurrentUserId()` in `services/api.ts` reads `sub` from the JWT payload just to decide what the UI shows —
+  ownership is always revalidated by the backend.
+- Tests: `backend/src/__tests__/reviews.test.ts` (12 cases, including public GET, 409 on duplicate, 404 on someone
+  else's review and the absence of emails in the payload) and `frontend/src/pages/MovieDetail.test.tsx`.
+  `vitest.setup.ts` now calls Testing Library's `cleanup` after each test, since the project does not use `globals: true`.

@@ -13,6 +13,7 @@ model User {
   password  String
   createdAt DateTime        @default(now())
   watchlist WatchlistItem[]
+  reviews   Review[]
 }
 
 model WatchlistItem {
@@ -27,6 +28,22 @@ model WatchlistItem {
   updatedAt  DateTime    @updatedAt
 
   @@unique([userId, movieId])
+}
+
+/// Una reseña por usuario y película, pública para todos los visitantes.
+/// `rating` se valida en la aplicación (1-5) para no migrar por cada cambio de escala.
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  movieId   Int
+  rating    Int
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, movieId])
+  @@index([movieId])
 }
 
 enum WatchStatus {

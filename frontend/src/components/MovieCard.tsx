@@ -1,4 +1,5 @@
 import { Bookmark, Check, ImageOff, Loader2, Star } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { Movie } from '../services/tmdb'
 import { posterUrl } from '../services/tmdb'
 
@@ -16,7 +17,9 @@ function MovieCard({ movie, state, onSave }: MovieCardProps) {
 
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 transition-colors hover:border-neutral-700">
-      <div className="aspect-2/3 bg-neutral-800">
+      {/* Sólo el póster y el título navegan al detalle: el botón de guardar
+          queda fuera del enlace para no anidar elementos interactivos. */}
+      <Link to={`/movie/${movie.id}`} className="block aspect-2/3 bg-neutral-800">
         {poster ? (
           <img src={poster} alt={movie.title} loading="lazy" className="h-full w-full object-cover" />
         ) : (
@@ -24,11 +27,15 @@ function MovieCard({ movie, state, onSave }: MovieCardProps) {
             <ImageOff className="h-8 w-8" aria-hidden="true" />
           </div>
         )}
-      </div>
+      </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div>
-          <h3 className="line-clamp-2 font-semibold text-white">{movie.title}</h3>
+          <h3 className="line-clamp-2 font-semibold text-white">
+            <Link to={`/movie/${movie.id}`} className="hover:text-amber-400">
+              {movie.title}
+            </Link>
+          </h3>
           <p className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
             <span>{year}</span>
             <span className="flex items-center gap-1">
