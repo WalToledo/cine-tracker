@@ -93,16 +93,19 @@ enum WatchStatus {
 - Acknowledge Context7 MCP usage and configure any initial settings if necessary for this workspace.
 - Testing setup with Vitest completed: backend uses Supertest against an exported Express `app` (`src/app.ts`), frontend uses React Testing Library with jsdom; both workspaces pass `npm run test`.
 
-### Step 2: Backend Auth & Database (Pending)
+### Step 2: Backend Auth & Database (COMPLETED)
 - Run Prisma migrations for the User and WatchlistItem models.
 - Implement /api/auth/register and /api/auth/login using bcrypt for password hashing and jsonwebtoken.
 - Implement JWT middleware to protect routes.
 
-### Step 3: Backend Watchlist API (Pending)
+### Step 3: Backend Watchlist API (COMPLETED)
 - Implement /api/watchlist CRUD operations (GET, POST, PATCH, DELETE).
+- All routes are protected by the `requireAuth` middleware and scoped to `req.user.id`.
+- `POST /api/watchlist` respects the `@@unique([userId, movieId])` constraint (409 on duplicates).
 
-### Step 4: Frontend Core (Pending)
-- Set up React Router.
-- Build Login/Register pages.
-- Build Home page (fetch trending from TMDB).
-- Build Movie Details & Watchlist integration.
+### Step 4: Frontend Core (CURRENT GOAL)
+- Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
+- Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
+- Build Home page (fetch trending from TMDB; falls back to mock data when `VITE_TMDB_API_KEY` is absent).
+- Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
+- `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
