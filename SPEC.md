@@ -172,6 +172,9 @@ enum WatchStatus {
   read-only display; `ReviewForm.tsx` creates and edits; `ReviewList.tsx` only offers Edit/Delete on the user's own review.
 - `getCurrentUserId()` in `services/api.ts` reads `sub` from the JWT payload just to decide what the UI shows —
   ownership is always revalidated by the backend.
+- Auth-gated actions never surface raw 401 messages: saving to the watchlist checks the session first, and any
+  401 on the detail page clears the token and redirects to `/login`. The origin route travels in `state.from`, so
+  `Login`/`Register` send the user back where they were (this also applies to `ProtectedRoute` redirects).
 - Tests: `backend/src/__tests__/reviews.test.ts` (12 cases, including public GET, 409 on duplicate, 404 on someone
   else's review and the absence of emails in the payload) and `frontend/src/pages/MovieDetail.test.tsx`.
   `vitest.setup.ts` now calls Testing Library's `cleanup` after each test, since the project does not use `globals: true`.
