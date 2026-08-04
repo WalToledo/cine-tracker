@@ -12,6 +12,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 - **Authentication:** JWT (JSON Web Tokens).
 - **External API:** TMDB API (The Movie Database).
 - **AI Integration:** Context7 MCP for extended context management and tooling in Claude Code.
+- **Testing:** Vitest (test runner for both workspaces), Supertest (backend API testing), React Testing Library (frontend component testing).
 
 ## 3. Directory Structure
 
@@ -22,6 +23,9 @@ cinetracker/
 │   │   ├── controllers/
 │   │   ├── middlewares/
 │   │   ├── routes/
+│   │   ├── __tests__/
+│   │   │   └── health.test.ts
+│   │   ├── app.ts
 │   │   └── index.ts
 │   └── package.json
 ├── frontend/
@@ -29,7 +33,9 @@ cinetracker/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── services/
-│   │   └── App.tsx
+│   │   ├── vitest.setup.ts
+│   │   ├── App.tsx
+│   │   └── App.test.tsx
 │   └── package.json
 ├── package.json
 └── SPEC.md
@@ -78,13 +84,14 @@ enum WatchStatus {
 
 ## 5. Execution Plan (For AI Assistant)
 
-### Step 1: Scaffolding & Setup (CURRENT GOAL)
+### Step 1: Scaffolding & Setup (COMPLETED)
 - Initialize the root folder as a monorepo.
 - Initialize the backend folder with Node, TS, Express, and Prisma. Set up the basic Express server.
 - Initialize the frontend folder with Vite (React + TS) and configure Tailwind CSS.
 - Ensure TypeScript compiles correctly in both environments.
 - Create a .env.example with necessary variables (DATABASE_URL, JWT_SECRET).
 - Acknowledge Context7 MCP usage and configure any initial settings if necessary for this workspace.
+- Testing setup with Vitest completed: backend uses Supertest against an exported Express `app` (`src/app.ts`), frontend uses React Testing Library with jsdom; both workspaces pass `npm run test`.
 
 ### Step 2: Backend Auth & Database (Pending)
 - Run Prisma migrations for the User and WatchlistItem models.
