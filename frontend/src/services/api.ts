@@ -26,6 +26,21 @@ export interface WatchlistItem {
   updatedAt: string
 }
 
+export interface ReviewAuthor {
+  id: string
+  displayName: string
+}
+
+export interface Review {
+  id: string
+  movieId: number
+  rating: number
+  content: string
+  createdAt: string
+  updatedAt: string
+  author: ReviewAuthor
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -50,6 +65,33 @@ export function clearToken(): void {
 
 export function isAuthenticated(): boolean {
   return getToken() !== null
+}
+
+/**
+ * Lee el `sub` del payload del JWT para saber qué reseñas son propias.
+ * Sólo sirve para decidir qué mostrar en la UI: el backend siempre revalida
+ * la propiedad del recurso.
+ */
+export function getCurrentUserId(): string | null {
+  const token = getToken()
+  if (!token) return null
+
+  const payload = token.split('.')[1]
+  if (!payload) return null
+
+  try {
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const decoded: unknown = JSON.parse(json)
+
+    if (decoded && typeof decoded === 'object' && 'sub' in decoded) {
+      const sub = (decoded as { sub: unknown }).sub
+      return typeof sub === 'string' ? sub : null
+    }
+
+    return null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -126,5 +168,32 @@ export const watchlistApi = {
 
   remove(id: string): Promise<void> {
     return apiFetch<void>(`/watchlist/${id}`, { method: 'DELETE' })
+  },
+}
+
+export const reviewsApi = {
+  async listByMovie(movieId: number): Promise<Review[]> {
+    const { reviews } = await apiFetch<{ reviews: Review[] }>(`/reviews/movie/${movieId}`)
+    return reviews
+  },
+
+  async create(review: { movieId: number; rating: number; content: string }): Promise<Review> {
+    const { review: created } = await apiFetch<{ review: Review }>('/reviews', {
+      method: 'POST',
+      body: JSON.stringify(review),
+    })
+    return created
+  },
+
+  async update(id: string, changes: { rating?: number; content?: string }): Promise<Review> {
+    const { review } = await apiFetch<{ review: Review }>(`/reviews/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    })
+    return review
+  },
+
+  remove(id: string): Promise<void> {
+    return apiFetch<void>(`/reviews/${id}`, { method: 'DELETE' })
   },
 }

@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import MovieDetail from './pages/MovieDetail'
 import Register from './pages/Register'
 import Watchlist from './pages/Watchlist'
 
@@ -12,6 +13,7 @@ function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Home />} />
+          <Route path="movie/:id" element={<MovieDetail />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
 

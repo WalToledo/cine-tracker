@@ -1,6 +1,8 @@
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY
 const TMDB_URL = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_URL = 'https://image.tmdb.org/t/p/w500'
+const TMDB_PROFILE_URL = 'https://image.tmdb.org/t/p/w185'
+const TMDB_BACKDROP_URL = 'https://image.tmdb.org/t/p/w1280'
 
 export interface Movie {
   id: number
@@ -9,6 +11,24 @@ export interface Movie {
   overview: string
   releaseDate: string
   voteAverage: number
+}
+
+export interface CastMember {
+  id: number
+  name: string
+  character: string
+  profilePath: string | null
+}
+
+export interface MovieDetails extends Movie {
+  backdropPath: string | null
+  tagline: string
+  runtime: number
+  genres: string[]
+  director: string | null
+  cast: CastMember[]
+  /** Clave de YouTube del trailer, o null si la película no tiene ninguno. */
+  trailerKey: string | null
 }
 
 interface TmdbMovie {
@@ -20,8 +40,31 @@ interface TmdbMovie {
   vote_average: number
 }
 
+/** Respuesta de /movie/:id con `append_to_response=credits,videos`. */
+interface TmdbMovieDetails extends TmdbMovie {
+  backdrop_path: string | null
+  tagline: string
+  runtime: number | null
+  genres: { id: number; name: string }[]
+  credits: {
+    cast: { id: number; name: string; character: string; profile_path: string | null }[]
+    crew: { id: number; name: string; job: string }[]
+  }
+  videos: {
+    results: { key: string; site: string; type: string; official: boolean }[]
+  }
+}
+
 export function posterUrl(posterPath: string | null): string | null {
   return posterPath ? `${TMDB_IMAGE_URL}${posterPath}` : null
+}
+
+export function profileUrl(profilePath: string | null): string | null {
+  return profilePath ? `${TMDB_PROFILE_URL}${profilePath}` : null
+}
+
+export function backdropUrl(backdropPath: string | null): string | null {
+  return backdropPath ? `${TMDB_BACKDROP_URL}${backdropPath}` : null
 }
 
 /** Datos temporales para desarrollar sin API Key de TMDB. */
@@ -122,4 +165,69 @@ export async function getTrendingMovies(): Promise<Movie[]> {
 
   const data: { results: TmdbMovie[] } = await response.json()
   return data.results.map(toMovie)
+}
+
+/** Prefiere el trailer oficial de YouTube y cae en el primero disponible. */
+function pickTrailerKey(videos: TmdbMovieDetails['videos']): string | null {
+  const trailers = videos.results.filter(
+    (video) => video.site === 'YouTube' && video.type === 'Trailer',
+  )
+
+  const trailer = trailers.find((video) => video.official) ?? trailers[0]
+  return trailer ? trailer.key : null
+}
+
+/**
+ * Detalle completo de una película: reparto, director y trailer llegan en la
+ * misma petición mediante `append_to_response`. Sin `VITE_TMDB_API_KEY` se
+ * responde con los datos mockeados, sin reparto ni trailer.
+ */
+export async function getMovieDetails(id: number): Promise<MovieDetails> {
+  if (!TMDB_API_KEY) {
+    const mock = MOCK_MOVIES.find((movie) => movie.id === id)
+    if (!mock) {
+      throw new Error('No encontramos esa película')
+    }
+
+    return {
+      ...mock,
+      backdropPath: null,
+      tagline: '',
+      runtime: 0,
+      genres: [],
+      director: null,
+      cast: [],
+      trailerKey: null,
+    }
+  }
+
+  const response = await fetch(
+    `${TMDB_URL}/movie/${id}?api_key=${TMDB_API_KEY}&language=es-ES&append_to_response=credits,videos`,
+  )
+
+  if (response.status === 404) {
+    throw new Error('No encontramos esa película')
+  }
+
+  if (!response.ok) {
+    throw new Error('No se pudo cargar la película desde TMDB')
+  }
+
+  const data: TmdbMovieDetails = await response.json()
+
+  return {
+    ...toMovie(data),
+    backdropPath: data.backdrop_path,
+    tagline: data.tagline,
+    runtime: data.runtime ?? 0,
+    genres: data.genres.map((genre) => genre.name),
+    director: data.credits.crew.find((member) => member.job === 'Director')?.name ?? null,
+    cast: data.credits.cast.slice(0, 10).map((member) => ({
+      id: member.id,
+      name: member.name,
+      character: member.character,
+      profilePath: member.profile_path,
+    })),
+    trailerKey: pickTrailerKey(data.videos),
+  }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Eye, ImageOff, Loader2, RotateCcw, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
 import type { WatchlistItem } from '../services/api'
 import { posterUrl } from '../services/tmdb'
@@ -98,7 +99,10 @@ function Watchlist() {
                 key={item.id}
                 className="flex items-center gap-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3"
               >
-                <div className="h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-neutral-800">
+                <Link
+                  to={`/movie/${item.movieId}`}
+                  className="block h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-neutral-800"
+                >
                   {poster ? (
                     <img src={poster} alt={item.title} className="h-full w-full object-cover" />
                   ) : (
@@ -106,10 +110,14 @@ function Watchlist() {
                       <ImageOff className="h-5 w-5" aria-hidden="true" />
                     </div>
                   )}
-                </div>
+                </Link>
 
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate font-semibold text-white">{item.title}</h3>
+                  <h3 className="truncate font-semibold text-white">
+                    <Link to={`/movie/${item.movieId}`} className="hover:text-amber-400">
+                      {item.title}
+                    </Link>
+                  </h3>
                   <span
                     className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                       watched ? 'bg-emerald-950 text-emerald-300' : 'bg-neutral-800 text-neutral-300'
