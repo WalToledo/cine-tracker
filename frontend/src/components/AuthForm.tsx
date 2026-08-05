@@ -2,18 +2,37 @@ import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 
+export interface AuthFormValues {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  username: string
+}
+
 interface AuthFormProps {
   title: string
   submitLabel: string
-  onSubmit: (email: string, password: string) => Promise<void>
+  /** El registro pide nombre, apellidos y usuario; el login sólo email y contraseña. */
+  withProfileFields?: boolean
+  onSubmit: (values: AuthFormValues) => Promise<void>
   footer: ReactNode
 }
 
-function AuthForm({ title, submitLabel, onSubmit, footer }: AuthFormProps) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+function AuthForm({ title, submitLabel, withProfileFields, onSubmit, footer }: AuthFormProps) {
+  const [values, setValues] = useState<AuthFormValues>({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    username: '',
+  })
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  function update(field: keyof AuthFormValues, value: string) {
+    setValues((current) => ({ ...current, [field]: value }))
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -21,7 +40,7 @@ function AuthForm({ title, submitLabel, onSubmit, footer }: AuthFormProps) {
     setSubmitting(true)
 
     try {
-      await onSubmit(email, password)
+      await onSubmit(values)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Algo salió mal, inténtalo de nuevo')
       setSubmitting(false)
@@ -30,14 +49,76 @@ function AuthForm({ title, submitLabel, onSubmit, footer }: AuthFormProps) {
 
   const inputClass =
     'w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-amber-500'
+  const labelClass = 'text-sm font-medium text-neutral-300'
 
   return (
     <div className="mx-auto max-w-sm">
       <h2 className="mb-6 text-2xl font-bold text-white">{title}</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {withProfileFields && (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="firstName" className={labelClass}>
+                  Nombre
+                </label>
+                <input
+                  id="firstName"
+                  type="text"
+                  required
+                  maxLength={50}
+                  autoComplete="given-name"
+                  value={values.firstName}
+                  onChange={(event) => update('firstName', event.target.value)}
+                  placeholder="Walter"
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="lastName" className={labelClass}>
+                  Apellidos
+                </label>
+                <input
+                  id="lastName"
+                  type="text"
+                  required
+                  maxLength={50}
+                  autoComplete="family-name"
+                  value={values.lastName}
+                  onChange={(event) => update('lastName', event.target.value)}
+                  placeholder="Toledo"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="username" className={labelClass}>
+                Nombre de usuario
+              </label>
+              <input
+                id="username"
+                type="text"
+                required
+                minLength={3}
+                maxLength={30}
+                pattern="[A-Za-z0-9_]+"
+                // Sin `title` el navegador muestra un aviso de patrón indescifrable.
+                title="Sólo letras, números y guion bajo"
+                autoComplete="username"
+                value={values.username}
+                onChange={(event) => update('username', event.target.value)}
+                placeholder="cinefila"
+                className={inputClass}
+              />
+            </div>
+          </>
+        )}
+
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="email" className="text-sm font-medium text-neutral-300">
+          <label htmlFor="email" className={labelClass}>
             Email
           </label>
           <input
@@ -45,15 +126,15 @@ function AuthForm({ title, submitLabel, onSubmit, footer }: AuthFormProps) {
             type="email"
             required
             autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            value={values.email}
+            onChange={(event) => update('email', event.target.value)}
             placeholder="tu@email.com"
             className={inputClass}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="password" className="text-sm font-medium text-neutral-300">
+          <label htmlFor="password" className={labelClass}>
             Contraseña
           </label>
           <input
@@ -61,9 +142,9 @@ function AuthForm({ title, submitLabel, onSubmit, footer }: AuthFormProps) {
             type="password"
             required
             minLength={8}
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            autoComplete={withProfileFields ? 'new-password' : 'current-password'}
+            value={values.password}
+            onChange={(event) => update('password', event.target.value)}
             placeholder="••••••••"
             className={inputClass}
           />

@@ -192,3 +192,25 @@ describe('Navbar suggestions', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 })
+
+describe('Navbar links', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('hides the profile link without a session', () => {
+    renderNavbar()
+
+    expect(screen.queryByRole('link', { name: 'Mi Perfil' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toBeInTheDocument()
+  })
+
+  it('shows the profile link with a session', () => {
+    // El `beforeEach` limpia el almacenamiento, así que el token se pone aquí.
+    localStorage.setItem('cinetracker.token', 'a.b.c')
+
+    renderNavbar()
+
+    expect(screen.getByRole('link', { name: 'Mi Perfil' })).toHaveAttribute('href', '/profile')
+  })
+})

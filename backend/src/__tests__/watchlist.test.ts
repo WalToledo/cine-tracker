@@ -6,6 +6,8 @@ import prisma from "../lib/prisma";
 
 describe("/api/watchlist", () => {
   const email = `watchlist-${randomUUID()}@example.com`;
+  // Los guiones de `randomUUID` no valen como username, así que se quitan.
+  const username = `watchlist_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const movieId = 550;
 
   let token: string;
@@ -13,9 +15,13 @@ describe("/api/watchlist", () => {
   let itemId: string;
 
   beforeAll(async () => {
-    const response = await request(app)
-      .post("/api/auth/register")
-      .send({ email, password: "SuperSecret123" });
+    const response = await request(app).post("/api/auth/register").send({
+      email,
+      password: "SuperSecret123",
+      firstName: "Watch",
+      lastName: "Lister",
+      username,
+    });
 
     expect(response.status).toBe(201);
 

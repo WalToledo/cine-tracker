@@ -12,23 +12,25 @@ interface ReviewWithAuthor {
   content: string;
   createdAt: Date;
   updatedAt: Date;
-  user: { id: string; email: string };
+  user: { id: string; username: string };
 }
 
 /**
- * Las reseñas son públicas, así que el email nunca sale del backend:
- * se expone sólo la parte local como nombre visible del autor.
+ * Las reseñas son públicas y el autor se identifica por el nombre de usuario que
+ * él mismo eligió. El email ni siquiera se lee de la base, así que no puede
+ * filtrarse. La clave sigue llamándose `displayName` porque describe el papel del
+ * campo —el nombre visible— y es el contrato que ya consume el frontend.
  */
 function toPublicReview(review: ReviewWithAuthor) {
   const { user, ...rest } = review;
 
   return {
     ...rest,
-    author: { id: user.id, displayName: user.email.split("@")[0] },
+    author: { id: user.id, displayName: user.username },
   };
 }
 
-const authorSelect = { select: { id: true, email: true } } as const;
+const authorSelect = { select: { id: true, username: true } } as const;
 
 function parseRating(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value)) return null;

@@ -1,6 +1,20 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthForm from '../components/AuthForm'
-import { authApi, setToken } from '../services/api'
+import type { AuthFormValues } from '../components/AuthForm'
+import { ApiError, authApi, setToken } from '../services/api'
+
+// El backend responde en inglés; los mensajes de usuario van en español.
+const ERRORS: Record<string, string> = {
+  'email already registered': 'Ese email ya tiene una cuenta',
+  'username already taken': 'Ese nombre de usuario ya está en uso',
+}
+
+function translateError(err: unknown): string {
+  if (err instanceof ApiError && ERRORS[err.message]) {
+    return ERRORS[err.message]
+  }
+  return 'No se pudo crear la cuenta'
+}
 
 function Register() {
   const navigate = useNavigate()
@@ -11,16 +25,21 @@ function Register() {
   const state = location.state as { from?: string } | null
   const from = state?.from?.startsWith('/') ? state.from : '/'
 
-  async function handleRegister(email: string, password: string) {
-    const { token } = await authApi.register(email, password)
-    setToken(token)
-    navigate(from, { replace: true })
+  async function handleRegister(values: AuthFormValues) {
+    try {
+      const { token } = await authApi.register(values)
+      setToken(token)
+      navigate(from, { replace: true })
+    } catch (err) {
+      throw new Error(translateError(err))
+    }
   }
 
   return (
     <AuthForm
       title="Crear cuenta"
       submitLabel="Registrarme"
+      withProfileFields
       onSubmit={handleRegister}
       footer={
         <>

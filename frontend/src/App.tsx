@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import MovieDetail from './pages/MovieDetail'
+import Profile from './pages/Profile'
 import Register from './pages/Register'
 import Search from './pages/Search'
 import Watchlist from './pages/Watchlist'
@@ -21,6 +22,7 @@ function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route path="watchlist" element={<Watchlist />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
