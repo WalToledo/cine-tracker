@@ -5,6 +5,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import MovieDetail from './pages/MovieDetail'
 import Register from './pages/Register'
+import Search from './pages/Search'
 import Watchlist from './pages/Watchlist'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="movie/:id" element={<MovieDetail />} />
+          <Route path="search" element={<Search />} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
 

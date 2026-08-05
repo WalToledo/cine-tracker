@@ -3,6 +3,9 @@ const TMDB_URL = "https://api.themoviedb.org/3";
 /** Las respuestas de TMDB cambian poco: evita quemar el rate limit al recargar. */
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
+/** TMDB no sirve resultados de búsqueda más allá de la página 500. */
+export const MAX_SEARCH_PAGE = 500;
+
 export interface Movie {
   id: number;
   title: string;
@@ -30,6 +33,13 @@ export interface MovieDetails extends Movie {
   trailerKey: string | null;
 }
 
+/** Resultados de /search/movie: la paginación la decide TMDB, no el cliente. */
+export interface MovieSearchResult {
+  movies: Movie[];
+  page: number;
+  totalPages: number;
+}
+
 interface TmdbMovie {
   id: number;
   title: string;
@@ -37,6 +47,12 @@ interface TmdbMovie {
   overview: string;
   release_date: string;
   vote_average: number;
+}
+
+interface TmdbSearchResponse {
+  page: number;
+  total_pages: number;
+  results: TmdbMovie[];
 }
 
 /** Respuesta de /movie/:id con `append_to_response=credits,videos`. */
@@ -256,6 +272,41 @@ export async function getMovieDetails(id: number): Promise<MovieDetails> {
         profilePath: member.profile_path,
       })),
       trailerKey: pickTrailerKey(data.videos),
+    };
+  });
+}
+
+/**
+ * Busca películas por título. Sin `TMDB_API_KEY` filtra los datos mockeados para
+ * que la búsqueda siga respondiendo algo coherente en desarrollo.
+ */
+export async function searchMovies(query: string, page: number): Promise<MovieSearchResult> {
+  const key = apiKey();
+  const term = query.trim();
+  const normalized = term.toLowerCase();
+
+  if (!key) {
+    const movies = MOCK_MOVIES.filter((movie) => movie.title.toLowerCase().includes(normalized));
+    return { movies, page: 1, totalPages: 1 };
+  }
+
+  // La clave se normaliza para que "Matrix" y "matrix " compartan entrada.
+  return withCache(`search:${normalized}:${page}`, async () => {
+    const response = await fetch(
+      `${TMDB_URL}/search/movie?api_key=${key}&language=es-ES&include_adult=false&page=${page}` +
+        `&query=${encodeURIComponent(term)}`,
+    );
+
+    if (!response.ok) {
+      throw new Error("No se pudo buscar en TMDB");
+    }
+
+    const data = (await response.json()) as TmdbSearchResponse;
+
+    return {
+      movies: data.results.map(toMovie),
+      page: data.page,
+      totalPages: data.total_pages,
     };
   });
 }

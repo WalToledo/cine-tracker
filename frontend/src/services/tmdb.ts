@@ -34,6 +34,13 @@ export interface MovieDetails extends Movie {
   trailerKey: string | null
 }
 
+/** Página de resultados de búsqueda: la paginación la decide TMDB. */
+export interface MovieSearchResult {
+  movies: Movie[]
+  page: number
+  totalPages: number
+}
+
 export function posterUrl(posterPath: string | null): string | null {
   return posterPath ? `${TMDB_IMAGE_URL}${posterPath}` : null
 }
@@ -73,5 +80,23 @@ export async function getMovieDetails(id: number): Promise<MovieDetails> {
       throw new Error('No encontramos esa película')
     }
     throw new Error('No se pudo cargar la película')
+  }
+}
+
+/**
+ * Busca películas por título. `page` empieza en 1; el backend devuelve cuántas
+ * páginas hay en total para poder pedir la siguiente.
+ */
+export async function searchMovies(query: string, page = 1): Promise<MovieSearchResult> {
+  try {
+    return await apiFetch<MovieSearchResult>(
+      `/movies/search?q=${encodeURIComponent(query)}&page=${page}`,
+    )
+  } catch (err) {
+    // El backend responde en inglés; los mensajes de usuario van en español.
+    if (err instanceof ApiError && err.status === 400) {
+      throw new Error('Escribe algo para buscar')
+    }
+    throw new Error('No se pudo completar la búsqueda')
   }
 }

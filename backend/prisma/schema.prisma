@@ -1,6 +1,10 @@
+// `moduleFormat` explícito: el backend compila a CommonJS y, sin esto, el
+// cliente generado sale en ESM y usa `import.meta.url`, lo que revienta el
+// `dist` en tiempo de ejecución ("exports is not defined in ES module scope").
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {

@@ -1,7 +1,7 @@
 # CineTracker - Project Specification
 
 ## 1. Project Overview
-CineTracker is a Full-Stack web application for movie tracking. Users can browse trending movies (via the TMDB API), open a detail page with cast, director and trailer, manage their accounts, maintain a personalized watchlist (Pending/Watched) and review the movies they watched. Search is specified in Step 7 and is **not implemented yet**.
+CineTracker is a Full-Stack web application for movie tracking. Users can browse trending movies (via the TMDB API), search the catalogue by title, open a detail page with cast, director and trailer, manage their accounts, maintain a personalized watchlist (Pending/Watched) and review the movies they watched.
 The project follows a simple Spec-Driven Development approach utilizing the Context7 MCP (Model Context Protocol) to manage project context and AI capabilities.
 
 ## 2. Tech Stack
@@ -53,12 +53,16 @@ cinetracker/
 │   │   │   ├── ReviewForm.tsx
 │   │   │   ├── ReviewList.tsx
 │   │   │   └── StarRating.tsx
+│   │   ├── hooks/
+│   │   │   └── useWatchlistSave.ts
 │   │   ├── pages/
 │   │   │   ├── Home.tsx
 │   │   │   ├── Login.tsx
 │   │   │   ├── MovieDetail.tsx
 │   │   │   ├── MovieDetail.test.tsx
 │   │   │   ├── Register.tsx
+│   │   │   ├── Search.tsx
+│   │   │   ├── Search.test.tsx
 │   │   │   └── Watchlist.tsx
 │   │   ├── services/
 │   │   │   ├── api.ts
@@ -73,11 +77,12 @@ cinetracker/
 
 ## 4. Database Schema (Prisma)
 
-> Nota: `provider = "prisma-client-js"` está deprecado en Prisma 7, y colocar `url` directamente en `datasource` rompe la app en esa versión. Se usa el generador `prisma-client` (output propio); `DATABASE_URL` se lee desde `backend/prisma.config.ts` en vez del bloque `datasource`. Modelos y relaciones sin cambios.
+> Nota: `provider = "prisma-client-js"` está deprecado en Prisma 7, y colocar `url` directamente en `datasource` rompe la app en esa versión. Se usa el generador `prisma-client` (output propio); `DATABASE_URL` se lee desde `backend/prisma.config.ts` en vez del bloque `datasource`. `moduleFormat = "cjs"` es obligatorio aquí: el backend compila a CommonJS y, por defecto, el cliente sale en ESM con `import.meta.url` y el `dist` no arranca. Modelos y relaciones sin cambios.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -202,21 +207,34 @@ enum WatchStatus {
 - Tests: `backend/src/__tests__/movies.test.ts` (8 cases) stubs `fetch` and `TMDB_API_KEY` — it is the only
   backend suite that does not need the database.
 
-### Step 7: Movie Search (PENDING)
-- **Not implemented yet.** This is the only step that is not COMPLETED.
-- Backend: `GET /api/movies/search?q=<text>` in `movies.routes.ts`, public like the rest of the catalogue. It must
-  be declared **before** `/:id` — same reason as `/trending` — or the param route swallows it.
-- It reuses `backend/src/services/tmdb.service.ts`: TMDB's `/search/movie` with `language=es-ES`, mapped with the
-  existing `toMovie()` and wrapped in the same `withCache()` (key `search:<q>`). Response shape `{ movies }`, like
-  `/trending`.
+### Step 7: Movie Search (COMPLETED)
+- **Deviation from the original spec:** search is paginated, so two details changed. The response is
+  `{ movies, page, totalPages }` instead of `{ movies }` (TMDB already reports `page` / `total_pages`, and without
+  paging only the first 20 results would ever be reachable), and the cache key is `search:<q>:<page>` instead of
+  `search:<q>`.
+- Backend: `GET /api/movies/search?q=<text>&page=<n>` in `movies.routes.ts`, public like the rest of the catalogue
+  and declared **before** `/:id` — same reason as `/trending` — or the param route swallows it.
+- It reuses `backend/src/services/tmdb.service.ts`: TMDB's `/search/movie` with `language=es-ES` and
+  `include_adult=false`, mapped with the existing `toMovie()` and wrapped in the same `withCache()`. The query is
+  `encodeURIComponent`-ed (unlike `/trending` and `/movie/:id`, which have nothing to escape) and the cache key is
+  normalized with `trim().toLowerCase()` so `"Matrix"` and `"matrix "` share an entry.
 - Validation mirrors `review.controller.ts`: a missing or empty-after-`trim()` `q` returns 400 with
-  `{ error: "q is required" }`.
-- Without a server-side `TMDB_API_KEY`, filter `MOCK_MOVIES` by title (case-insensitive), so the Step 6 fallback
-  stays coherent.
-- Frontend: `searchMovies(query)` in `services/tmdb.ts`, going through the `apiFetch` exported by `services/api.ts`
-  and keeping the existing `Movie` type.
-- A search input in `components/Navbar.tsx` navigates to a new public `/search?q=...` route in `App.tsx`, outside
-  `ProtectedRoute`. Results reuse `components/MovieCard.tsx` and the same grid as `pages/Home.tsx`, including its
-  logic for marking as `saved` whatever is already in the watchlist.
-- Tests: new cases in `backend/src/__tests__/movies.test.ts`, stubbing `fetch` and `TMDB_API_KEY` like the Step 6
-  ones — result mapping, 400 on an empty `q`, and mock filtering without a key.
+  `{ error: "q is required" }`; `page` is optional, defaults to 1 and must be an integer within
+  `1..MAX_SEARCH_PAGE` (500, TMDB's own limit) or it returns 400.
+- Without a server-side `TMDB_API_KEY`, `MOCK_MOVIES` is filtered by title (case-insensitive) and answered as a
+  single page, so the Step 6 fallback stays coherent.
+- Frontend: `searchMovies(query, page)` in `services/tmdb.ts` goes through the `apiFetch` exported by
+  `services/api.ts`, keeps the existing `Movie` type and translates the backend error to Spanish like
+  `getMovieDetails()`.
+- A search input in `components/Navbar.tsx` navigates to the new public `/search?q=...` route in `App.tsx`, outside
+  `ProtectedRoute`. The input is kept in sync with `?q` via `useSearchParams`, so reloading or going back keeps it
+  filled. `pages/Search.tsx` reuses `components/MovieCard.tsx` and the same grid as `pages/Home.tsx`, appends each
+  extra page with a "Cargar más" button (shown only while `page < totalPages`) and reuses the empty-state styling
+  of `pages/Watchlist.tsx`.
+- The "mark what is already saved + tolerate the 409" logic that lived inside `Home.tsx` was extracted to
+  `hooks/useWatchlistSave.ts` so both Home and Search share it instead of duplicating it. Saving without a session
+  redirects to `/login` carrying `state.from` (including the query string), like the rest of the app.
+- Tests: 5 new cases in `backend/src/__tests__/movies.test.ts` (mapping + pagination reporting, per-page caching,
+  400 on missing/blank `q`, 400 on an out-of-range `page`, and mock filtering without a key) and the new
+  `frontend/src/pages/Search.test.tsx` (results, "Cargar más" appending page 2, empty state, and no request when
+  the URL has no `q`).

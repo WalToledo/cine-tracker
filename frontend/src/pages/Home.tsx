@@ -1,74 +1,38 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import MovieCard from '../components/MovieCard'
-import type { SaveState } from '../components/MovieCard'
-import { ApiError, isAuthenticated, watchlistApi } from '../services/api'
+import { useWatchlistSave } from '../hooks/useWatchlistSave'
 import { getTrendingMovies } from '../services/tmdb'
 import type { Movie } from '../services/tmdb'
 
 function Home() {
-  const navigate = useNavigate()
   const [movies, setMovies] = useState<Movie[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [saveStates, setSaveStates] = useState<Record<number, SaveState>>({})
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const { saveStates, saveError, save } = useWatchlistSave()
 
   useEffect(() => {
     let active = true
 
-    async function load() {
-      try {
-        const trending = await getTrendingMovies()
-        if (!active) return
-        setMovies(trending)
-
-        // Marca las que ya están guardadas para no ofrecer duplicados.
-        if (isAuthenticated()) {
-          const items = await watchlistApi.list()
-          if (!active) return
-          setSaveStates(Object.fromEntries(items.map((item) => [item.movieId, 'saved' as const])))
-        }
-      } catch (err) {
+    getTrendingMovies()
+      .then((trending) => {
+        if (active) setMovies(trending)
+      })
+      .catch((err: unknown) => {
         if (active) {
-          setError(err instanceof Error ? err.message : 'No se pudieron cargar las películas')
+          setLoadError(err instanceof Error ? err.message : 'No se pudieron cargar las películas')
         }
-      } finally {
+      })
+      .finally(() => {
         if (active) setLoading(false)
-      }
-    }
+      })
 
-    void load()
     return () => {
       active = false
     }
   }, [])
 
-  async function handleSave(movie: Movie) {
-    if (!isAuthenticated()) {
-      navigate('/login')
-      return
-    }
-
-    setSaveStates((current) => ({ ...current, [movie.id]: 'saving' }))
-
-    try {
-      await watchlistApi.add({
-        movieId: movie.id,
-        title: movie.title,
-        posterPath: movie.posterPath,
-      })
-      setSaveStates((current) => ({ ...current, [movie.id]: 'saved' }))
-    } catch (err) {
-      // 409 significa que ya estaba en la lista: el resultado es el mismo.
-      if (err instanceof ApiError && err.status === 409) {
-        setSaveStates((current) => ({ ...current, [movie.id]: 'saved' }))
-        return
-      }
-      setSaveStates((current) => ({ ...current, [movie.id]: 'idle' }))
-      setError(err instanceof Error ? err.message : 'No se pudo guardar la película')
-    }
-  }
+  const error = loadError ?? saveError
 
   if (loading) {
     return (
@@ -97,7 +61,7 @@ function Home() {
             key={movie.id}
             movie={movie}
             state={saveStates[movie.id] ?? 'idle'}
-            onSave={handleSave}
+            onSave={save}
           />
         ))}
       </div>
