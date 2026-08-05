@@ -98,7 +98,7 @@ export function getCurrentUserId(): string | null {
  * Wrapper sobre fetch que adjunta el JWT de localStorage en cada petición
  * y normaliza los errores del backend (`{ error: string }`) como ApiError.
  */
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken()
 
   const headers = new Headers(init.headers)

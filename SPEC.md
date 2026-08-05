@@ -1,7 +1,7 @@
 # CineTracker - Project Specification
 
 ## 1. Project Overview
-CineTracker is a Full-Stack web application for movie tracking. Users can search for movies (via TMDB API), manage their accounts, and maintain a personalized watchlist (Pending/Watched). 
+CineTracker is a Full-Stack web application for movie tracking. Users can browse trending movies (via the TMDB API), open a detail page with cast, director and trailer, manage their accounts, maintain a personalized watchlist (Pending/Watched) and review the movies they watched. Search is specified in Step 7 and is **not implemented yet**.
 The project follows a simple Spec-Driven Development approach utilizing the Context7 MCP (Model Context Protocol) to manage project context and AI capabilities.
 
 ## 2. Tech Stack
@@ -10,7 +10,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 - **Frontend:** React (built with Vite), TypeScript, Tailwind CSS.
 - **Database & ORM:** MySQL, Prisma.
 - **Authentication:** JWT (JSON Web Tokens).
-- **External API:** TMDB API (The Movie Database).
+- **External API:** TMDB API (The Movie Database), consumed **server-side** through the `/api/movies` proxy since Step 6 — never from the browser.
 - **AI Integration:** Context7 MCP for extended context management and tooling in Claude Code.
 - **Testing:** Vitest (test runner for both workspaces), Supertest (backend API testing), React Testing Library (frontend component testing).
 
@@ -22,16 +22,21 @@ cinetracker/
 │   ├── src/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
+│   │   │   ├── movies.controller.ts
 │   │   │   ├── review.controller.ts
 │   │   │   └── watchlist.controller.ts
 │   │   ├── middlewares/
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
+│   │   │   ├── movies.routes.ts
 │   │   │   ├── review.routes.ts
 │   │   │   └── watchlist.routes.ts
+│   │   ├── services/
+│   │   │   └── tmdb.service.ts
 │   │   ├── __tests__/
 │   │   │   ├── auth.test.ts
 │   │   │   ├── health.test.ts
+│   │   │   ├── movies.test.ts
 │   │   │   ├── reviews.test.ts
 │   │   │   └── watchlist.test.ts
 │   │   ├── app.ts
@@ -132,7 +137,7 @@ enum WatchStatus {
 - Initialize the backend folder with Node, TS, Express, and Prisma. Set up the basic Express server.
 - Initialize the frontend folder with Vite (React + TS) and configure Tailwind CSS.
 - Ensure TypeScript compiles correctly in both environments.
-- Create a .env.example with necessary variables (DATABASE_URL, JWT_SECRET).
+- Create a .env.example with necessary variables (DATABASE_URL, JWT_SECRET; `TMDB_API_KEY` and `VITE_API_URL` were added later, in Step 6).
 - Acknowledge Context7 MCP usage and configure any initial settings if necessary for this workspace.
 - Testing setup with Vitest completed: backend uses Supertest against an exported Express `app` (`src/app.ts`), frontend uses React Testing Library with jsdom; both workspaces pass `npm run test`.
 
@@ -149,7 +154,7 @@ enum WatchStatus {
 ### Step 4: Frontend Core (COMPLETED)
 - Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
 - Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
-- Build Home page (fetch trending from TMDB; falls back to mock data when `VITE_TMDB_API_KEY` is absent).
+- Build Home page (fetch trending from TMDB; falls back to mock data when the API key is absent — see Step 6).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
 - `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
 
@@ -166,7 +171,8 @@ enum WatchStatus {
   Home and in the watchlist. Without a session the review form is replaced by a link to `/login`.
 - `services/tmdb.ts` adds `getMovieDetails()`, which fetches cast, director and trailer in a single request via
   `append_to_response=credits,videos` (director = `crew.job === 'Director'`, trailer = official YouTube `Trailer`),
-  plus the `profileUrl()` / `backdropUrl()` helpers. Without `VITE_TMDB_API_KEY` it falls back to the mock data.
+  plus the `profileUrl()` / `backdropUrl()` helpers. Step 6 moved that TMDB call behind the backend proxy, keeping
+  the same function signatures.
 - `MovieDetail.tsx` shows the hero (backdrop, poster, runtime, genres, tagline), synopsis, cast grid, embedded
   YouTube trailer, a "save to watchlist" button and the reviews block. `StarRating.tsx` serves both as input and
   read-only display; `ReviewForm.tsx` creates and edits; `ReviewList.tsx` only offers Edit/Delete on the user's own review.
@@ -178,3 +184,39 @@ enum WatchStatus {
 - Tests: `backend/src/__tests__/reviews.test.ts` (12 cases, including public GET, 409 on duplicate, 404 on someone
   else's review and the absence of emails in the payload) and `frontend/src/pages/MovieDetail.test.tsx`.
   `vitest.setup.ts` now calls Testing Library's `cleanup` after each test, since the project does not use `globals: true`.
+
+### Step 6: TMDB Proxy (COMPLETED)
+- TMDB is no longer called from the browser. The v3 API key lives **only** on the server as `TMDB_API_KEY`
+  (root `.env`, loaded by `src/lib/env.ts`), so it never reaches the frontend bundle. `VITE_TMDB_API_KEY` is gone.
+- New public routes `GET /api/movies/trending` → `{ movies }` and `GET /api/movies/:id` → `{ movie }`
+  (`/trending` is declared before `/:id` so the param does not swallow it). No `requireAuth`, like the public
+  review listing. A non-integer `id` returns 400; `TmdbNotFoundError` maps to 404.
+- `backend/src/services/tmdb.service.ts` owns everything key-dependent: the TMDB response types, `toMovie()`,
+  `pickTrailerKey()`, the `append_to_response=credits,videos` request and `MOCK_MOVIES`. The mock fallback now
+  triggers on a missing **server-side** key, so the frontend no longer needs to know whether one is configured.
+  Responses are cached in memory for 10 minutes to stay within TMDB's rate limit (`clearTmdbCache()` for tests).
+- `frontend/src/services/tmdb.ts` keeps the public types and the `posterUrl()` / `profileUrl()` / `backdropUrl()`
+  helpers (`image.tmdb.org` is a public CDN, no key needed) and now calls the proxy through the `apiFetch` exported
+  by `services/api.ts`. `getTrendingMovies()` and `getMovieDetails()` keep their exact signatures, so `Home.tsx`,
+  `MovieDetail.tsx` and their tests were untouched.
+- Tests: `backend/src/__tests__/movies.test.ts` (8 cases) stubs `fetch` and `TMDB_API_KEY` — it is the only
+  backend suite that does not need the database.
+
+### Step 7: Movie Search (PENDING)
+- **Not implemented yet.** This is the only step that is not COMPLETED.
+- Backend: `GET /api/movies/search?q=<text>` in `movies.routes.ts`, public like the rest of the catalogue. It must
+  be declared **before** `/:id` — same reason as `/trending` — or the param route swallows it.
+- It reuses `backend/src/services/tmdb.service.ts`: TMDB's `/search/movie` with `language=es-ES`, mapped with the
+  existing `toMovie()` and wrapped in the same `withCache()` (key `search:<q>`). Response shape `{ movies }`, like
+  `/trending`.
+- Validation mirrors `review.controller.ts`: a missing or empty-after-`trim()` `q` returns 400 with
+  `{ error: "q is required" }`.
+- Without a server-side `TMDB_API_KEY`, filter `MOCK_MOVIES` by title (case-insensitive), so the Step 6 fallback
+  stays coherent.
+- Frontend: `searchMovies(query)` in `services/tmdb.ts`, going through the `apiFetch` exported by `services/api.ts`
+  and keeping the existing `Movie` type.
+- A search input in `components/Navbar.tsx` navigates to a new public `/search?q=...` route in `App.tsx`, outside
+  `ProtectedRoute`. Results reuse `components/MovieCard.tsx` and the same grid as `pages/Home.tsx`, including its
+  logic for marking as `saved` whatever is already in the watchlist.
+- Tests: new cases in `backend/src/__tests__/movies.test.ts`, stubbing `fetch` and `TMDB_API_KEY` like the Step 6
+  ones — result mapping, 400 on an empty `q`, and mock filtering without a key.
