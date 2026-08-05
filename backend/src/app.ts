@@ -2,6 +2,7 @@ import "./lib/env";
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.routes";
+import movieRoutes from "./routes/movies.routes";
 import reviewRoutes from "./routes/review.routes";
 import watchlistRoutes from "./routes/watchlist.routes";
 
@@ -15,6 +16,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/movies", movieRoutes);
 app.use("/api/watchlist", watchlistRoutes);
 app.use("/api/reviews", reviewRoutes);
 
