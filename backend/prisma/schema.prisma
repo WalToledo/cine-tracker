@@ -11,10 +11,18 @@ datasource db {
   provider = "mysql"
 }
 
+/// `@db.VarChar` explícito porque un `String` sin anotar es `VARCHAR(191)` en MySQL:
+/// así el schema documenta los mismos límites que valida la aplicación. El índice
+/// único de `username` hereda la collation `utf8mb4_unicode_ci` de la base, que es
+/// insensible a mayúsculas: "Walter" y "walter" son el mismo usuario a propósito,
+/// para que nadie suplante a otro cambiando sólo la capitalización.
 model User {
   id        String          @id @default(uuid())
   email     String          @unique
   password  String
+  firstName String          @db.VarChar(50)
+  lastName  String          @db.VarChar(50)
+  username  String          @unique @db.VarChar(30)
   createdAt DateTime        @default(now())
   watchlist WatchlistItem[]
   reviews   Review[]

@@ -7,12 +7,40 @@ export type WatchStatus = 'PENDING' | 'WATCHED'
 export interface User {
   id: string
   email: string
+  username: string
+  firstName: string
+  lastName: string
   createdAt: string
 }
 
 export interface AuthResponse {
   user: User
   token: string
+}
+
+export interface RegisterInput {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  username: string
+}
+
+export interface ProfileStats {
+  watched: number
+  pending: number
+  reviews: number
+}
+
+export interface Profile {
+  user: User
+  stats: ProfileStats
+}
+
+export interface ProfileChanges {
+  firstName?: string
+  lastName?: string
+  username?: string
 }
 
 export interface WatchlistItem {
@@ -125,10 +153,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 }
 
 export const authApi = {
-  register(email: string, password: string): Promise<AuthResponse> {
+  register(input: RegisterInput): Promise<AuthResponse> {
     return apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(input),
     })
   },
 
@@ -137,6 +165,21 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
+  },
+}
+
+export const usersApi = {
+  // Devuelve las dos claves porque `stats` no es un atributo del usuario.
+  getProfile(): Promise<Profile> {
+    return apiFetch<Profile>('/users/profile')
+  },
+
+  async updateProfile(changes: ProfileChanges): Promise<User> {
+    const { user } = await apiFetch<{ user: User }>('/users/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    })
+    return user
   },
 }
 

@@ -2,7 +2,7 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. Los 8 steps están COMPLETED.
+conviene actualizarlo al cerrar uno. Los 9 steps están COMPLETED.
 
 ## Comandos (desde la raíz)
 
@@ -39,6 +39,20 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`
   corren sin base. Un `pool timeout` de Prisma con `active=0 idle=0` suele ser un handshake
   `caching_sha2_password` fallido, no la base caída.
+- El índice único de `username` hereda la collation `utf8mb4_unicode_ci`, que es **insensible a
+  mayúsculas**: `Walter` y `walter` colisionan. Nunca comparar usernames con `===` en JavaScript;
+  `auth.controller.ts` usa dos `findUnique` separados para distinguir el 409 de email del de
+  username, y `user.controller.ts` excluye al propio usuario por `id`, no por texto.
+- Las reseñas exponen `author: { id, displayName }` y ese `displayName` sale del `username`. El
+  `authorSelect` de `review.controller.ts` no debe volver a pedir el `email`: ahí está la garantía
+  de que no se filtra.
+- `tmdb.service.ts` cachea las respuestas 10 minutos en memoria. Un test que espere una petición
+  nueva tiene que llamar antes a `clearTmdbCache()`.
+- Los usernames de los tests no pueden llevar los guiones de `randomUUID()`: el patrón
+  `[a-zA-Z0-9_]{3,30}` los rechaza con un 400 que parece de otro campo.
+- El buscador del Navbar lleva un debounce de 250 ms y no usa `AbortController`; las respuestas
+  obsoletas se descartan con el patrón `let active = true` que comparten `Home.tsx`, `Search.tsx`
+  y `Profile.tsx`.
 
 ## Convenciones
 
@@ -46,3 +60,13 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - Los errores del backend son `{ error: string }` **en inglés**; el frontend los traduce al
   español antes de mostrarlos.
 - Los comentarios del código se escriben en español y explican el porqué, no el qué.
+- Un recurso de otro usuario devuelve **404, no 403** (`review.controller.ts`,
+  `watchlist.controller.ts`): no se revela que exista.
+
+## Reglas Maestras de Documentación (Skill para SPEC.md)
+
+Cuando se te pida actualizar el archivo `SPEC.md` para marcar un step como COMPLETED, actúa como un Arquitecto de Software de alto nivel y obedece estrictamente estas reglas para evitar el exceso de texto:
+
+1. **Sé Extremadamente Conciso:** Limítate a un máximo de 4 bullet points (viñetas) cortos por step. No escribas un changelog de commits.
+2. **Enfócate en el "Qué" y "Dónde", no en el "Cómo":** Menciona qué modelos de base de datos se agregaron, las nuevas rutas de la API y los componentes/páginas principales del frontend. Omite explicaciones de lógica interna, transacciones SQL, clases de UI (Tailwind) o justificaciones de decisiones técnicas.
+3. **Omite Detalles de Testing:** No listes la cantidad de casos de prueba, ni describas los mocks o limpiezas de DOM, a menos que se haya introducido una librería de testing completamente nueva al stack.

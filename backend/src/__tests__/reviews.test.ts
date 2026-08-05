@@ -7,6 +7,9 @@ import prisma from "../lib/prisma";
 describe("/api/reviews", () => {
   const authorEmail = `review-author-${randomUUID()}@example.com`;
   const otherEmail = `review-other-${randomUUID()}@example.com`;
+  // Los guiones de `randomUUID` no valen como username, así que se quitan.
+  const authorUsername = `author_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const otherUsername = `other_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   // movieId aleatorio para que el listado público sólo contenga las reseñas de este test.
   const movieId = 900_000 + Math.floor(Math.random() * 99_999);
 
@@ -17,17 +20,25 @@ describe("/api/reviews", () => {
   let reviewId: string;
 
   beforeAll(async () => {
-    const author = await request(app)
-      .post("/api/auth/register")
-      .send({ email: authorEmail, password: "SuperSecret123" });
+    const author = await request(app).post("/api/auth/register").send({
+      email: authorEmail,
+      password: "SuperSecret123",
+      firstName: "Auto",
+      lastName: "Ra",
+      username: authorUsername,
+    });
 
     expect(author.status).toBe(201);
     authorToken = author.body.token;
     authorId = author.body.user.id;
 
-    const other = await request(app)
-      .post("/api/auth/register")
-      .send({ email: otherEmail, password: "SuperSecret123" });
+    const other = await request(app).post("/api/auth/register").send({
+      email: otherEmail,
+      password: "SuperSecret123",
+      firstName: "Otra",
+      lastName: "Persona",
+      username: otherUsername,
+    });
 
     expect(other.status).toBe(201);
     otherToken = other.body.token;
@@ -111,7 +122,7 @@ describe("/api/reviews", () => {
     expect(response.body.reviews).toHaveLength(1);
     expect(response.body.reviews[0].author).toEqual({
       id: authorId,
-      displayName: authorEmail.split("@")[0],
+      displayName: authorUsername,
     });
     expect(JSON.stringify(response.body)).not.toContain("@example.com");
   });

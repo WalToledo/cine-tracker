@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthForm from '../components/AuthForm'
+import type { AuthFormValues } from '../components/AuthForm'
 import { authApi, setToken } from '../services/api'
 
 function Login() {
@@ -11,7 +12,7 @@ function Login() {
   const state = location.state as { from?: string } | null
   const from = state?.from?.startsWith('/') ? state.from : '/'
 
-  async function handleLogin(email: string, password: string) {
+  async function handleLogin({ email, password }: AuthFormValues) {
     const { token } = await authApi.login(email, password)
     setToken(token)
     navigate(from, { replace: true })

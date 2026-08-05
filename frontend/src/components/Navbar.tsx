@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
-import { Clapperboard, Film, ListVideo, LogIn, LogOut, Search } from 'lucide-react'
+import { Clapperboard, Film, ListVideo, LogIn, LogOut, Search, UserRound } from 'lucide-react'
 import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import SearchSuggestions from './SearchSuggestions'
 import type { SuggestionGroup } from './SearchSuggestions'
@@ -304,10 +304,19 @@ function Navbar() {
         </NavLink>
 
         {authenticated ? (
-          <button type="button" onClick={handleLogout} className={`${linkBase} text-neutral-400 hover:bg-neutral-800/60 hover:text-white`}>
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Cerrar sesión
-          </button>
+          <>
+            {/* Con el buscador delante la barra va justa: en móvil queda sólo el
+                icono, y el aria-label mantiene el nombre accesible. */}
+            <NavLink to="/profile" className={navLinkClass} aria-label="Mi Perfil">
+              <UserRound className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Mi Perfil</span>
+            </NavLink>
+
+            <button type="button" onClick={handleLogout} className={`${linkBase} text-neutral-400 hover:bg-neutral-800/60 hover:text-white`}>
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              Cerrar sesión
+            </button>
+          </>
         ) : (
           <NavLink to="/login" className={navLinkClass}>
             <LogIn className="h-4 w-4" aria-hidden="true" />
