@@ -2,7 +2,7 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. El Step 7 (búsqueda de películas) está PENDING.
+conviene actualizarlo al cerrar uno. Los 7 steps están COMPLETED.
 
 ## Comandos (desde la raíz)
 
@@ -28,10 +28,14 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
   a su texto literal, rompe la app. Los modelos y relaciones sí coinciden.
 - Tras `prisma migrate dev` hay que correr `npx prisma generate`, o el modelo nuevo llega
   `undefined` en tiempo de ejecución.
+- El generador lleva `moduleFormat = "cjs"` a propósito: el backend compila a CommonJS y,
+  sin esa línea, Prisma emite el cliente en ESM con `import.meta.url` y `npm run start`
+  muere con `exports is not defined in ES module scope` (el `tsc` sí pasa; sólo falla al
+  ejecutar el `dist`).
 - En Express 5 un handler con `:id` necesita `Request<{ id: string }>` explícito o `tsc`
   falla. Ejemplo en `backend/src/controllers/review.controller.ts`.
 - Las rutas literales van antes que las paramétricas en el mismo router: en
-  `movies.routes.ts`, `/trending` precede a `/:id`.
+  `movies.routes.ts`, `/trending` y `/search` preceden a `/:id`.
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`
   corren sin base. Un `pool timeout` de Prisma con `active=0 idle=0` suele ser un handshake
   `caching_sha2_password` fallido, no la base caída.
