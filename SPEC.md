@@ -49,11 +49,14 @@ cinetracker/
 │   │   │   ├── Layout.tsx
 │   │   │   ├── MovieCard.tsx
 │   │   │   ├── Navbar.tsx
+│   │   │   ├── Navbar.test.tsx
 │   │   │   ├── ProtectedRoute.tsx
 │   │   │   ├── ReviewForm.tsx
 │   │   │   ├── ReviewList.tsx
+│   │   │   ├── SearchSuggestions.tsx
 │   │   │   └── StarRating.tsx
 │   │   ├── hooks/
+│   │   │   ├── useDebouncedValue.ts
 │   │   │   └── useWatchlistSave.ts
 │   │   ├── pages/
 │   │   │   ├── Home.tsx
@@ -66,6 +69,7 @@ cinetracker/
 │   │   │   └── Watchlist.tsx
 │   │   ├── services/
 │   │   │   ├── api.ts
+│   │   │   ├── recentSearches.ts
 │   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
 │   │   ├── App.tsx
@@ -238,3 +242,34 @@ enum WatchStatus {
   400 on missing/blank `q`, 400 on an out-of-range `page`, and mock filtering without a key) and the new
   `frontend/src/pages/Search.test.tsx` (results, "Cargar más" appending page 2, empty state, and no request when
   the URL has no `q`).
+
+### Step 8: Search Suggestions (COMPLETED)
+- **No backend changes.** The Navbar dropdown is built entirely on the endpoints Steps 6 and 7 already exposed
+  (`GET /api/movies/trending` and `GET /api/movies/search`), which are public and cached for 10 minutes in
+  `backend/src/services/tmdb.service.ts` — that cache is what makes an autocomplete affordable within TMDB's rate limit.
+- The search input in `components/Navbar.tsx` became an ARIA combobox (`role="combobox"`, `aria-expanded`,
+  `aria-controls`, `aria-autocomplete="list"`, `aria-activedescendant`) driving a panel of suggestions.
+- **Focused and empty** → recent searches (up to 4) followed by trending movies (up to 6, skipping ids already
+  listed as recent). **While typing** → the top 7 results of `searchMovies(q, 1)`.
+- A "recent search" stores the **movie the user picked**, not the typed text, so every row in the panel is the same
+  kind of thing and every row navigates to `/movie/:id`. `services/recentSearches.ts` keeps up to 5 of them in
+  `localStorage` under `cinetracker.recentSearches`, deduplicated by id, validating the parsed JSON and swallowing
+  every error like `getCurrentUserId()` does — the Navbar renders on every page and must not break.
+- Requests fire only from the second character on (a single letter returns noise) and go through the new generic
+  `hooks/useDebouncedValue.ts` (250 ms), so a burst of keystrokes produces one request. Stale responses are
+  discarded with the `let active = true` cleanup pattern already used in `Home.tsx` / `Search.tsx`; the project
+  still uses no `AbortController`. Trending is fetched once per session, guarded by a `useRef`.
+- Picking a suggestion goes straight to `/movie/:id`. **Enter without a highlighted row keeps the Step 7 behaviour**
+  (`/search?q=…`), so the results page and its pagination are still reachable — that is why the highlight starts at
+  `-1` and why no "see all results" row was added.
+- Keyboard: `ArrowDown` / `ArrowUp` wrap around a flat index over every row (the group headings are not selectable),
+  `Enter` picks, `Escape` closes without clearing the text, `Tab` closes. The panel also closes on a `mousedown`
+  outside the form — the first `document` listener in the project.
+- `components/SearchSuggestions.tsx` is presentational only (it receives the groups and the highlighted index, and
+  owns no fetching). Its rows reuse `posterUrl()` and the poster + title + year layout of `MovieCard.tsx`, and they
+  `preventDefault()` on `mousedown` so the input's `blur` does not close the panel before the `click` lands.
+- Tests: the new `frontend/src/components/Navbar.test.tsx` (8 cases: trending on focus, recents listed first,
+  debounce collapsing three keystrokes into one request, no request with a single character, click navigating to
+  `/movie/603` plus the entry written to `localStorage`, arrows + Enter, submit falling back to `/search?q=`, and
+  `Escape` closing). It mocks `services/tmdb` with `vi.hoisted` + `importOriginal` like `Search.test.tsx`, so
+  `posterUrl` stays real; no fake timers are needed because 250 ms fits inside Testing Library's default timeout.

@@ -2,7 +2,7 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. Los 7 steps están COMPLETED.
+conviene actualizarlo al cerrar uno. Los 8 steps están COMPLETED.
 
 ## Comandos (desde la raíz)
 
