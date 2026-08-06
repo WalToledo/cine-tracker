@@ -19,6 +19,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 cinetracker/
 ├── backend/
 │   ├── prisma/
+│   ├── prisma.config.ts
 │   ├── src/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
@@ -31,6 +32,8 @@ cinetracker/
 │   │   │   ├── prisma.ts
 │   │   │   └── user.ts
 │   │   ├── middlewares/
+│   │   │   ├── auth.middleware.ts
+│   │   │   └── error.middleware.ts
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── movies.routes.ts
@@ -39,11 +42,16 @@ cinetracker/
 │   │   │   └── watchlist.routes.ts
 │   │   ├── services/
 │   │   │   └── tmdb.service.ts
+│   │   ├── types/
+│   │   │   └── express/
+│   │   │       └── index.d.ts
 │   │   ├── __tests__/
 │   │   │   ├── auth.test.ts
+│   │   │   ├── globalSetup.ts
 │   │   │   ├── health.test.ts
 │   │   │   ├── movies.test.ts
 │   │   │   ├── reviews.test.ts
+│   │   │   ├── setup.ts
 │   │   │   ├── users.test.ts
 │   │   │   └── watchlist.test.ts
 │   │   ├── app.ts
@@ -79,6 +87,7 @@ cinetracker/
 │   │   │   └── Watchlist.tsx
 │   │   ├── services/
 │   │   │   ├── api.ts
+│   │   │   ├── errors.ts
 │   │   │   ├── recentSearches.ts
 │   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
@@ -179,7 +188,7 @@ enum WatchStatus {
 ### Step 4: Frontend Core (COMPLETED)
 - Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
 - Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
-- Build Home page (fetch trending from TMDB; falls back to mock data when the API key is absent — see Step 6).
+- Build Home page (fetch trending through the backend proxy — see Step 6).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
 - `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
 
@@ -232,3 +241,18 @@ enum WatchStatus {
 - **Frontend:** new protected `pages/Profile.tsx` with the stat cards and inline editing;
   `components/AuthForm.tsx` and `pages/Register.tsx` render the new inputs; "Mi Perfil" link in
   `components/Navbar.tsx`.
+
+### Step 10: Hardening & Documentation Debt (COMPLETED)
+- **Startup:** `postinstall` running `prisma generate` in `backend/package.json`; `src/lib/env.ts`
+  now fails fast when `DATABASE_URL` or `JWT_SECRET` are missing or unparseable; `VITE_API_URL`
+  moved out of the root `.env.example` into the new `frontend/.env.example`.
+- **Backend:** new `middlewares/error.middleware.ts` (`errorHandler` + `notFoundHandler`) closing
+  `app.ts` with the `{ error }` contract; `NODE_ENV` set in the scripts through `cross-env`;
+  `index.ts` warns when `TMDB_API_KEY` is absent; `tsconfig.json` excludes `src/__tests__`.
+- **Frontend:** new `services/errors.ts` (`translateError`, `isUnauthorized`) shared by
+  `pages/Login.tsx`, `Register.tsx` and `Watchlist.tsx`, which now redirects on 401; the trending
+  guard in `components/Navbar.tsx` is released on failure and on unmount; `strict` on in
+  `tsconfig.app.json`.
+- **Testing:** an optional root `.env.test` (see `.env.test.example`) points the backend suites at
+  their own database, wired through the new `src/__tests__/setup.ts` and `globalSetup.ts`, and the
+  suites now run serially.

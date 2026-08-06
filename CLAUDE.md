@@ -2,7 +2,7 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. Los 9 steps están COMPLETED.
+conviene actualizarlo al cerrar uno. Los 10 steps están COMPLETED.
 
 ## Comandos (desde la raíz)
 
@@ -16,18 +16,26 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 
 ## Lo que rompe si no se sabe
 
-- **El `.env` está en la raíz**, no en los workspaces. `backend/src/lib/env.ts` y
+- **El `.env` del backend está en la raíz**, no en los workspaces. `backend/src/lib/env.ts` y
   `backend/prisma.config.ts` lo resuelven por ruta relativa. Vite **no** lo lee (no hay
-  `envDir` configurado), así que una variable `VITE_*` puesta ahí no llega al frontend.
+  `envDir` configurado): las variables `VITE_*` van en `frontend/.env`, y su plantilla es
+  `frontend/.env.example`.
+- `env.ts` corta el arranque si faltan `DATABASE_URL` o `JWT_SECRET`, o si la primera no es una
+  URL parseable. Es a propósito: antes, sin `JWT_SECRET`, la API respondía 401 a todo y `jwt.sign`
+  tiraba un `TypeError` sin nombrar la variable. Cualquier script que importe `app.ts` necesita
+  ese `.env` presente.
 - La API Key de TMDB vive **sólo en el servidor** (`TMDB_API_KEY`); el navegador consume
   películas por el proxy `/api/movies`. No reintroducir `VITE_TMDB_API_KEY`.
 - Prisma 7 usa el generador `prisma-client` con salida en `backend/src/generated/prisma`
-  (no `prisma-client-js`), y `DATABASE_URL` se lee desde `prisma.config.ts`, no del bloque
-  `datasource`. Importar el cliente desde esa ruta generada, **no** desde `@prisma/client`.
-  La sección 4 de `SPEC.md` está desactualizada en ese punto: no revertir `schema.prisma`
-  a su texto literal, rompe la app. Los modelos y relaciones sí coinciden.
+  (no `prisma-client-js`). Importar el cliente desde esa ruta generada, **no** desde
+  `@prisma/client`.
+- El bloque `datasource` de `schema.prisma` no lleva `url` a propósito, y son dos caminos
+  distintos: el **CLI** (`migrate`, `generate`) lee `DATABASE_URL` desde `prisma.config.ts`;
+  en **tiempo de ejecución** el cliente no la usa, porque `src/lib/prisma.ts` le pasa un
+  `PrismaMariaDb` de `@prisma/adapter-mariadb` construido con esa URL parseada a mano.
 - Tras `prisma migrate dev` hay que correr `npx prisma generate`, o el modelo nuevo llega
-  `undefined` en tiempo de ejecución.
+  `undefined` en tiempo de ejecución. El `postinstall` del backend lo corre solo tras cada
+  `npm install`, que es lo que salva a un clon limpio: `src/generated/prisma` está gitignored.
 - El generador lleva `moduleFormat = "cjs"` a propósito: el backend compila a CommonJS y,
   sin esa línea, Prisma emite el cliente en ESM con `import.meta.url` y `npm run start`
   muere con `exports is not defined in ES module scope` (el `tsc` sí pasa; sólo falla al
@@ -37,8 +45,17 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - Las rutas literales van antes que las paramétricas en el mismo router: en
   `movies.routes.ts`, `/trending` y `/search` preceden a `/:id`.
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`
-  corren sin base. Un `pool timeout` de Prisma con `active=0 idle=0` suele ser un handshake
-  `caching_sha2_password` fallido, no la base caída.
+  corren sin base, pero **no sin `DATABASE_URL`**: importan `app.ts`, que arrastra a Prisma, y
+  `src/lib/prisma.ts` hace `new URL(process.env.DATABASE_URL!)` al cargarse. Basta con que la
+  variable sea parseable aunque no apunte a nada vivo. Un `pool timeout` de Prisma con
+  `active=0 idle=0` suele ser un handshake `caching_sha2_password` fallido, no la base caída.
+- `src/__tests__/setup.ts` carga un `.env.test` de la raíz (opcional, plantilla en
+  `.env.test.example`) con `override: true` para que las suites no escriban en la base de
+  desarrollo. Si no existe, `globalSetup.ts` avisa y se sigue contra el `.env` normal. Las suites
+  corren en serie (`fileParallelism: false`): comparten base y en paralelo se pisaban.
+- Ese aviso va por `process.stderr.write` y vive en `globalSetup`, no en `setupFiles`: vitest
+  intercepta la consola y el reporter por defecto se traga los `console.warn` del setup, y
+  `setupFiles` corre una vez por archivo de test, así que el mensaje salía seis veces.
 - El índice único de `username` hereda la collation `utf8mb4_unicode_ci`, que es **insensible a
   mayúsculas**: `Walter` y `walter` colisionan. Nunca comparar usernames con `===` en JavaScript;
   `auth.controller.ts` usa dos `findUnique` separados para distinguir el 409 de email del de
@@ -53,12 +70,22 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - El buscador del Navbar lleva un debounce de 250 ms y no usa `AbortController`; las respuestas
   obsoletas se descartan con el patrón `let active = true` que comparten `Home.tsx`, `Search.tsx`
   y `Profile.tsx`.
+- El `trendingRequested` de `Navbar.tsx` pide las tendencias una sola vez por sesión, pero se
+  marca **antes** de que llegue la respuesta. Hay que liberarlo si la petición falla o si el panel
+  se cierra antes de tiempo: si no, el `.finally` no llega a apagar el spinner y el efecto tampoco
+  vuelve a entrar, así que el "cargando" se queda para siempre.
 
 ## Convenciones
 
 - Backend: comillas dobles y punto y coma. Frontend: comillas simples, sin punto y coma.
 - Los errores del backend son `{ error: string }` **en inglés**; el frontend los traduce al
-  español antes de mostrarlos.
+  español en `services/errors.ts` antes de mostrarlos. Nunca se pinta `err.message` crudo: se
+  llama a `translateError(err, fallback)`, donde el `fallback` cubre red caída y mensajes que
+  todavía no están en el diccionario. Ese diccionario indexa por el texto literal del
+  controlador, así que cambiarlo en el backend rompe la traducción en silencio.
+- El contrato `{ error }` lo cierra `middlewares/error.middleware.ts`: un throw sin capturar ya
+  no sale como HTML con el stack. El stack sólo viaja si `NODE_ENV !== "production"`, y los
+  scripts lo fijan con `cross-env` (en Windows `NODE_ENV=x cmd` no funciona a secas).
 - Los comentarios del código se escriben en español y explican el porqué, no el qué.
 - Un recurso de otro usuario devuelve **404, no 403** (`review.controller.ts`,
   `watchlist.controller.ts`): no se revela que exista.

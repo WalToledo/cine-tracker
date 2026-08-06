@@ -12,5 +12,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Los tests no son parte del artefacto: sin esto `dist/` acaba con las seis suites
+  // (y con supertest y vitest como dependencias de producción implícitas).
+  "exclude": ["src/__tests__"]
 }

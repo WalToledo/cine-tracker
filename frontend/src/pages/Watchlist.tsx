@@ -1,15 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Eye, ImageOff, Loader2, RotateCcw, Trash2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { watchlistApi } from '../services/api'
 import type { WatchlistItem } from '../services/api'
+import { handleUnauthorized, isUnauthorized, translateError } from '../services/errors'
 import { posterUrl } from '../services/tmdb'
 
 function Watchlist() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  // Un token caducado no es un error que mostrar: es una sesión que hay que rehacer.
+  // El resto sí se pinta, ya traducido — el backend contesta en inglés.
+  const reportError = useCallback(
+    (err: unknown, fallback: string) => {
+      if (isUnauthorized(err)) {
+        handleUnauthorized()
+        navigate('/login', { replace: true, state: { from: '/watchlist' } })
+        return
+      }
+
+      setError(translateError(err, fallback))
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     let active = true
@@ -20,9 +37,7 @@ function Watchlist() {
         if (active) setItems(result)
       })
       .catch((err: unknown) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'No se pudo cargar tu lista')
-        }
+        if (active) reportError(err, 'No se pudo cargar tu lista')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -31,7 +46,7 @@ function Watchlist() {
     return () => {
       active = false
     }
-  }, [])
+  }, [reportError])
 
   async function handleToggleStatus(item: WatchlistItem) {
     const nextStatus = item.status === 'PENDING' ? 'WATCHED' : 'PENDING'
@@ -42,7 +57,7 @@ function Watchlist() {
       const updated = await watchlistApi.updateStatus(item.id, nextStatus)
       setItems((current) => current.map((it) => (it.id === updated.id ? updated : it)))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo actualizar el estado')
+      reportError(err, 'No se pudo actualizar el estado')
     } finally {
       setBusyId(null)
     }
@@ -56,7 +71,7 @@ function Watchlist() {
       await watchlistApi.remove(item.id)
       setItems((current) => current.filter((it) => it.id !== item.id))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo eliminar la película')
+      reportError(err, 'No se pudo eliminar la película')
     } finally {
       setBusyId(null)
     }

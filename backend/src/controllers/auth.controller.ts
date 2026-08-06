@@ -103,6 +103,6 @@ export async function login(req: Request, res: Response) {
 
   const { password: _password, ...publicUser } = user;
   const token = signToken(publicUser);
-
+  
   return res.status(200).json({ user: publicUser, token });
 }

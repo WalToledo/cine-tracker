@@ -67,13 +67,18 @@ function Navbar() {
 
     trendingRequested.current = true
     let active = true
+    let settled = false
     setTrendingLoading(true)
 
     getTrendingMovies()
       .then((movies) => {
+        settled = true
         if (active) setTrending(movies)
       })
       .catch((err: unknown) => {
+        // Un fallo no puede dejar el ref marcado: si no, el panel nunca reintenta.
+        trendingRequested.current = false
+        settled = true
         if (active) {
           setTrendingError(err instanceof Error ? err.message : 'No se pudieron cargar las películas')
         }
@@ -84,6 +89,13 @@ function Navbar() {
 
     return () => {
       active = false
+      // Si el panel se cierra antes de que llegue la respuesta, el `.finally` ya no
+      // apaga el spinner. Se apaga aquí y se libera el ref, o al reabrir queda un
+      // "cargando" perpetuo que nada vuelve a resolver.
+      if (!settled) {
+        trendingRequested.current = false
+        setTrendingLoading(false)
+      }
     }
   }, [open, searching])
 
