@@ -6,7 +6,7 @@ import ReviewForm from '../components/ReviewForm'
 import ReviewList from '../components/ReviewList'
 import {
   ApiError,
-  clearToken,
+  clearSession,
   getCurrentUserId,
   isAuthenticated,
   reviewsApi,
@@ -44,12 +44,12 @@ function MovieDetail() {
   }
 
   /**
-   * Un 401 significa que no hay sesión utilizable (falta el token o caducó):
+   * Un 401 significa que no hay sesión utilizable (falta la cookie o caducó):
    * en lugar de mostrar el mensaje del backend, se descarta y se pide login.
    */
   function handleUnauthorized(err: unknown): boolean {
     if (err instanceof ApiError && err.status === 401) {
-      clearToken()
+      clearSession()
       goToLogin()
       return true
     }

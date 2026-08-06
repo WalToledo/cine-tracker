@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
+import { clearAuthCookie, setAuthCookie, TOKEN_TTL_SECONDS } from "../lib/auth-cookie";
 import { publicUserSelect, uniqueConflictError } from "../lib/user";
 import type { LoginBody, RegisterBody } from "../schemas/auth.schema";
 
@@ -9,7 +10,7 @@ import type { LoginBody, RegisterBody } from "../schemas/auth.schema";
 // un token de 7 días arrastraría el valor viejo hasta su caducidad.
 function signToken(user: { id: string; email: string }) {
   return jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET as string, {
-    expiresIn: "7d",
+    expiresIn: TOKEN_TTL_SECONDS,
   });
 }
 
@@ -48,9 +49,11 @@ export async function register(req: Request<never, unknown, RegisterBody>, res: 
     throw err;
   }
 
-  const token = signToken(user);
+  // El token no vuelve en el body a propósito: si el navegador pudiera leerlo,
+  // la cookie httpOnly no serviría de nada.
+  setAuthCookie(res, signToken(user));
 
-  return res.status(201).json({ user, token });
+  return res.status(201).json({ user });
 }
 
 export async function login(req: Request<never, unknown, LoginBody>, res: Response) {
@@ -70,7 +73,14 @@ export async function login(req: Request<never, unknown, LoginBody>, res: Respon
   }
 
   const { password: _password, ...publicUser } = user;
-  const token = signToken(publicUser);
-  
-  return res.status(200).json({ user: publicUser, token });
+  setAuthCookie(res, signToken(publicUser));
+
+  return res.status(200).json({ user: publicUser });
+}
+
+// Público a propósito: cerrar sesión con la cookie ya caducada tiene que funcionar
+// igual, y `requireAuth` respondería 401 justo cuando el usuario quiere salir.
+export function logout(_req: Request, res: Response) {
+  clearAuthCookie(res);
+  return res.status(204).send();
 }

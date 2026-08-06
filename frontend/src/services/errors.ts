@@ -1,4 +1,4 @@
-import { ApiError, clearToken } from './api'
+import { ApiError, clearSession } from './api'
 
 // El backend responde `{ error }` en inglés y la UI habla español. Las claves son
 // literales de los controladores: si cambian allí, dejan de traducir aquí en silencio
@@ -48,9 +48,10 @@ export function isUnauthorized(err: unknown): boolean {
 }
 
 /**
- * Un 401 con token guardado significa que ese token ya no vale. Hay que borrarlo o
- * `ProtectedRoute` sigue viéndolo y deja entrar a una sesión muerta.
+ * Un 401 significa que la cookie de sesión ya no vale. Hay que borrar el usuario
+ * guardado o `ProtectedRoute` sigue viéndolo y deja entrar a una sesión muerta.
+ * La cookie no hace falta tocarla: el backend no la aceptará más.
  */
 export function handleUnauthorized(): void {
-  clearToken()
+  clearSession()
 }

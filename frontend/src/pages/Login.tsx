@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthForm from '../components/AuthForm'
 import type { AuthFormValues } from '../components/AuthForm'
-import { authApi, setToken } from '../services/api'
+import { authApi, saveSession } from '../services/api'
 import { translateError } from '../services/errors'
 
 function Login() {
@@ -15,8 +15,9 @@ function Login() {
 
   async function handleLogin({ email, password }: AuthFormValues) {
     try {
-      const { token } = await authApi.login(email, password)
-      setToken(token)
+      // El token se queda en la cookie httpOnly que acaba de emitir el backend.
+      const { user } = await authApi.login(email, password)
+      saveSession(user)
       navigate(from, { replace: true })
     } catch (err) {
       // `AuthForm` pinta lo que se lance; sin esto llegaba el inglés del backend.

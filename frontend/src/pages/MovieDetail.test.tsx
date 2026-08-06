@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MovieDetail from './MovieDetail'
-import { ApiError, getToken, reviewsApi, setToken, watchlistApi } from '../services/api'
-import type { Review } from '../services/api'
+import { ApiError, getSessionUser, reviewsApi, saveSession, watchlistApi } from '../services/api'
+import type { Review, User } from '../services/api'
 import type { MovieDetails } from '../services/tmdb'
 
 const MOVIE: MovieDetails = {
@@ -23,6 +23,15 @@ const MOVIE: MovieDetails = {
     { id: 287, name: 'Brad Pitt', character: 'Tyler Durden', profilePath: null },
   ],
   trailerKey: 'BdJKm16Co6M',
+}
+
+const USER: User = {
+  id: 'user-1',
+  email: 'walter@example.com',
+  username: 'cinefila',
+  firstName: 'Walter',
+  lastName: 'Toledo',
+  createdAt: '2026-08-01T10:00:00.000Z',
 }
 
 const REVIEW: Review = {
@@ -103,8 +112,8 @@ describe('MovieDetail', () => {
     expect(add).not.toHaveBeenCalled()
   })
 
-  it('clears an expired token and asks to log in again', async () => {
-    setToken('expired.token.value')
+  it('clears a dead session and asks to log in again', async () => {
+    saveSession(USER)
     vi.spyOn(watchlistApi, 'list').mockResolvedValue([])
     vi.spyOn(watchlistApi, 'add').mockRejectedValue(
       new ApiError(401, 'Invalid or expired token'),
@@ -115,7 +124,7 @@ describe('MovieDetail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Guardar en mi lista' }))
 
     expect(await screen.findByText('pantalla de inicio de sesión')).toBeInTheDocument()
-    expect(getToken()).toBeNull()
+    expect(getSessionUser()).toBeNull()
   })
 
   it('shows an error state when the movie cannot be loaded', async () => {

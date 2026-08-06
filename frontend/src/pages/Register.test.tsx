@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Register from './Register'
-import { ApiError, authApi } from '../services/api'
+import { ApiError, authApi, getSessionUser } from '../services/api'
 import type { User } from '../services/api'
 
 const USER: User = {
@@ -53,10 +53,8 @@ describe('Register', () => {
     expect(screen.getByLabelText('Contraseña')).toBeInTheDocument()
   })
 
-  it('submits every field and stores the token', async () => {
-    const register = vi
-      .spyOn(authApi, 'register')
-      .mockResolvedValue({ user: USER, token: 'a.b.c' })
+  it('submits every field and stores the session user', async () => {
+    const register = vi.spyOn(authApi, 'register').mockResolvedValue({ user: USER })
 
     renderRegister()
     fillForm()
@@ -70,7 +68,8 @@ describe('Register', () => {
       lastName: 'Toledo',
       username: 'cinefila',
     })
-    expect(localStorage.getItem('cinetracker.token')).toBe('a.b.c')
+    // El token no se guarda: vive en la cookie httpOnly que emite el backend.
+    expect(getSessionUser()).toEqual(USER)
   })
 
   it('translates a taken username into spanish', async () => {

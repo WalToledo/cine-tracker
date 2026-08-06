@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import app from "../app";
 import prisma from "../lib/prisma";
+import { authCookie } from "./helpers";
 
 // Los guiones de `randomUUID` no valen como username, así que se quitan.
 function uniqueSuffix() {
@@ -17,7 +18,7 @@ describe("/api/users/profile", () => {
   const firstMovieId = 800_000 + Math.floor(Math.random() * 99_999);
   const secondMovieId = firstMovieId + 1;
 
-  let token: string;
+  let cookie: string;
   let userId: string;
   let otherId: string;
   // Cambia a mitad de suite: el PATCH lo actualiza y los casos siguientes lo usan.
@@ -33,7 +34,7 @@ describe("/api/users/profile", () => {
     });
 
     expect(owner.status).toBe(201);
-    token = owner.body.token;
+    cookie = authCookie(owner);
     userId = owner.body.user.id;
 
     const other = await request(app).post("/api/auth/register").send({
@@ -55,7 +56,7 @@ describe("/api/users/profile", () => {
     await prisma.$disconnect();
   });
 
-  it("rejects requests without a token", async () => {
+  it("rejects requests without a session cookie", async () => {
     const response = await request(app).get("/api/users/profile");
 
     expect(response.status).toBe(401);
@@ -64,7 +65,7 @@ describe("/api/users/profile", () => {
   it("returns the profile with zero stats for a new user", async () => {
     const response = await request(app)
       .get("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(response.status).toBe(200);
     expect(response.body.user.username).toBe(username);
@@ -76,7 +77,7 @@ describe("/api/users/profile", () => {
   it("never exposes the password hash", async () => {
     const response = await request(app)
       .get("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(response.body.user.password).toBeUndefined();
   });
@@ -84,35 +85,35 @@ describe("/api/users/profile", () => {
   it("counts watchlist items by status and reviews", async () => {
     const pending = await request(app)
       .post("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ movieId: firstMovieId, title: "Pendiente" });
 
     expect(pending.status).toBe(201);
 
     const watched = await request(app)
       .post("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ movieId: secondMovieId, title: "Vista" });
 
     expect(watched.status).toBe(201);
 
     const updated = await request(app)
       .patch(`/api/watchlist/${watched.body.item.id}`)
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ status: "WATCHED" });
 
     expect(updated.status).toBe(200);
 
     const review = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ movieId: secondMovieId, rating: 5, content: "Una maravilla." });
 
     expect(review.status).toBe(201);
 
     const response = await request(app)
       .get("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(response.status).toBe(200);
     expect(response.body.stats).toEqual({ watched: 1, pending: 1, reviews: 1 });
@@ -123,7 +124,7 @@ describe("/api/users/profile", () => {
 
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ firstName: "Wally", username: renamed });
 
     expect(response.status).toBe(200);
@@ -138,7 +139,7 @@ describe("/api/users/profile", () => {
   it("rejects an empty patch", async () => {
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({});
 
     expect(response.status).toBe(400);
@@ -149,7 +150,7 @@ describe("/api/users/profile", () => {
   it("rejects a firstName that is not a string", async () => {
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ firstName: 5 });
 
     expect(response.status).toBe(400);
@@ -158,7 +159,7 @@ describe("/api/users/profile", () => {
   it("rejects an invalid username", async () => {
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ username: "con espacios" });
 
     expect(response.status).toBe(400);
@@ -167,7 +168,7 @@ describe("/api/users/profile", () => {
   it("rejects a username already taken by another user", async () => {
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ username: otherUsername });
 
     expect(response.status).toBe(409);
@@ -179,7 +180,7 @@ describe("/api/users/profile", () => {
   it("accepts its own username in a different case", async () => {
     const response = await request(app)
       .patch("/api/users/profile")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ username: username.toUpperCase() });
 
     expect(response.status).toBe(200);

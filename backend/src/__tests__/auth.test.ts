@@ -6,6 +6,20 @@ import app from "../app";
 import prisma from "../lib/prisma";
 import { PASSWORD_ERROR } from "../lib/password";
 import { EMAIL_ERROR } from "../schemas/auth.schema";
+import { rawAuthCookie } from "./helpers";
+
+/**
+ * La garantía del Step 13: el token sale en una cookie que el navegador no deja
+ * leer por JavaScript, y no en el body donde cualquier XSS lo alcanzaría.
+ */
+function expectSessionCookie(response: request.Response) {
+  const cookie = rawAuthCookie(response);
+
+  expect(cookie).toContain("HttpOnly");
+  expect(cookie).toContain("SameSite=Lax");
+  expect(cookie).toContain("Path=/");
+  expect(response.body.token).toBeUndefined();
+}
 
 // Los guiones de `randomUUID` no valen como username, así que se quitan.
 function uniqueSuffix() {
@@ -24,7 +38,7 @@ describe("POST /api/auth/register", () => {
     await prisma.$disconnect();
   });
 
-  it("registers a user and returns a token without the password", async () => {
+  it("registers a user and sets the session cookie without the password", async () => {
     const response = await request(app).post("/api/auth/register").send({
       email,
       password: "SuperSecret123!",
@@ -39,7 +53,7 @@ describe("POST /api/auth/register", () => {
     expect(response.body.user.firstName).toBe("Walter");
     expect(response.body.user.lastName).toBe("Toledo");
     expect(response.body.user.password).toBeUndefined();
-    expect(response.body.token).toEqual(expect.any(String));
+    expectSessionCookie(response);
   });
 
   it("rejects a registration without the profile fields", async () => {
@@ -231,11 +245,11 @@ describe("POST /api/auth/login", () => {
     await prisma.$disconnect();
   });
 
-  it("returns a token and hides the password hash", async () => {
+  it("sets the session cookie and hides the password hash", async () => {
     const response = await request(app).post("/api/auth/login").send({ email, password });
 
     expect(response.status).toBe(200);
-    expect(response.body.token).toEqual(expect.any(String));
+    expectSessionCookie(response);
     expect(response.body.user.password).toBeUndefined();
   });
 
@@ -291,6 +305,23 @@ describe("POST /api/auth/login", () => {
       .send({ email: legacyEmail, password: legacyPassword });
 
     expect(response.status).toBe(200);
-    expect(response.body.token).toEqual(expect.any(String));
+    expectSessionCookie(response);
+  });
+});
+
+describe("POST /api/auth/logout", () => {
+  it("expires the session cookie", async () => {
+    const response = await request(app).post("/api/auth/logout");
+
+    expect(response.status).toBe(204);
+    // `Expires` en el pasado es como el navegador entiende "bórrala".
+    expect(rawAuthCookie(response)).toContain("Expires=Thu, 01 Jan 1970");
+  });
+
+  // Sin token no puede responder 401: es justo cuando el usuario quiere salir.
+  it("works without a session cookie", async () => {
+    const response = await request(app).post("/api/auth/logout");
+
+    expect(response.status).toBe(204);
   });
 });

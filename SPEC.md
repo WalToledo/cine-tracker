@@ -9,7 +9,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 - **Backend:** Node.js, Express, TypeScript.
 - **Frontend:** React (built with Vite), TypeScript, Tailwind CSS.
 - **Database & ORM:** MySQL, Prisma.
-- **Authentication:** JWT (JSON Web Tokens).
+- **Authentication:** JWT (JSON Web Tokens), delivered in an `HttpOnly` cookie since Step 13.
 - **External API:** TMDB API (The Movie Database), consumed **server-side** through the `/api/movies` proxy since Step 6 — never from the browser.
 - **AI Integration:** Context7 MCP for extended context management and tooling in Claude Code.
 - **Testing:** Vitest (test runner for both workspaces), Supertest (backend API testing), React Testing Library (frontend component testing).
@@ -28,6 +28,7 @@ cinetracker/
 │   │   │   ├── user.controller.ts
 │   │   │   └── watchlist.controller.ts
 │   │   ├── lib/
+│   │   │   ├── auth-cookie.ts
 │   │   │   ├── env.ts
 │   │   │   ├── password.ts
 │   │   │   ├── prisma.ts
@@ -58,6 +59,7 @@ cinetracker/
 │   │   │   ├── auth.test.ts
 │   │   │   ├── globalSetup.ts
 │   │   │   ├── health.test.ts
+│   │   │   ├── helpers.ts
 │   │   │   ├── movies.test.ts
 │   │   │   ├── password.test.ts
 │   │   │   ├── reviews.test.ts
@@ -201,11 +203,11 @@ enum WatchStatus {
 - `POST /api/watchlist` respects the `@@unique([userId, movieId])` constraint (409 on duplicates).
 
 ### Step 4: Frontend Core (COMPLETED)
-- Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
-- Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
+- Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a stored session (see Step 13).
+- Build Login/Register pages that persist the session and redirect home.
 - Build Home page (fetch trending through the backend proxy — see Step 6).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
-- `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
+- `src/services/api.ts` centralizes fetch calls and carries the session credentials on every request.
 
 ### Step 5: Movie Detail Page & Reviews (COMPLETED)
 - **Database:** new `Review` model (migration `add_review_model`), one review per user and movie.
@@ -296,3 +298,14 @@ enum WatchStatus {
   `components/PasswordStrength.tsx`; `services/api.ts` adds `usersApi.changePassword()`.
 - **Frontend:** `services/errors.ts` translates the new literals for a wrong current password and
   for a new password that repeats the old one.
+
+### Step 13: Session Cookie (COMPLETED)
+- **Backend:** the JWT now travels in an `HttpOnly` cookie issued by the new
+  `lib/auth-cookie.ts`; `register` and `login` no longer return it in the body and
+  `requireAuth` reads the cookie instead of `Authorization: Bearer`.
+- **Backend:** new public `POST /api/auth/logout`, plus `cookie-parser` and a CORS `origin`
+  taken from the new optional `FRONTEND_URL` with `credentials: true`.
+- **Frontend:** `services/api.ts` swaps its token helpers for `saveSession` / `getSessionUser` /
+  `clearSession` over the `User` object, and `apiFetch` sends `credentials: 'include'`.
+- **Frontend:** `components/Navbar.tsx` calls `authApi.logout()` before clearing the local
+  session; `getCurrentUserId()` no longer decodes the JWT in the browser.

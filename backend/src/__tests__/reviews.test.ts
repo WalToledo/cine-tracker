@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import app from "../app";
 import prisma from "../lib/prisma";
+import { authCookie } from "./helpers";
 
 describe("/api/reviews", () => {
   const authorEmail = `review-author-${randomUUID()}@example.com`;
@@ -13,9 +14,9 @@ describe("/api/reviews", () => {
   // movieId aleatorio para que el listado público sólo contenga las reseñas de este test.
   const movieId = 900_000 + Math.floor(Math.random() * 99_999);
 
-  let authorToken: string;
+  let authorCookie: string;
   let authorId: string;
-  let otherToken: string;
+  let otherCookie: string;
   let otherId: string;
   let reviewId: string;
 
@@ -29,7 +30,7 @@ describe("/api/reviews", () => {
     });
 
     expect(author.status).toBe(201);
-    authorToken = author.body.token;
+    authorCookie = authCookie(author);
     authorId = author.body.user.id;
 
     const other = await request(app).post("/api/auth/register").send({
@@ -41,7 +42,7 @@ describe("/api/reviews", () => {
     });
 
     expect(other.status).toBe(201);
-    otherToken = other.body.token;
+    otherCookie = authCookie(other);
     otherId = other.body.user.id;
   });
 
@@ -51,7 +52,7 @@ describe("/api/reviews", () => {
     await prisma.$disconnect();
   });
 
-  it("lists reviews of a movie without a token", async () => {
+  it("lists reviews of a movie without a session cookie", async () => {
     const response = await request(app).get(`/api/reviews/movie/${movieId}`);
 
     expect(response.status).toBe(200);
@@ -64,7 +65,7 @@ describe("/api/reviews", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects creating a review without a token", async () => {
+  it("rejects creating a review without a session cookie", async () => {
     const response = await request(app)
       .post("/api/reviews")
       .send({ movieId, rating: 4, content: "Sin sesión no debería entrar" });
@@ -75,7 +76,7 @@ describe("/api/reviews", () => {
   it("rejects a rating outside 1-5", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ movieId, rating: 9, content: "Puntuación inválida" });
 
     expect(response.status).toBe(400);
@@ -85,7 +86,7 @@ describe("/api/reviews", () => {
   it("rejects a rating sent as a string", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ movieId, rating: "4", content: "Puntuación en texto" });
 
     expect(response.status).toBe(400);
@@ -94,7 +95,7 @@ describe("/api/reviews", () => {
   it("rejects an empty content", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ movieId, rating: 4, content: "   " });
 
     expect(response.status).toBe(400);
@@ -103,7 +104,7 @@ describe("/api/reviews", () => {
   it("creates a review", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ movieId, rating: 4, content: "Una gran película." });
 
     expect(response.status).toBe(201);
@@ -119,7 +120,7 @@ describe("/api/reviews", () => {
   it("rejects a second review of the same movie by the same user", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ movieId, rating: 2, content: "Cambié de opinión." });
 
     expect(response.status).toBe(409);
@@ -140,7 +141,7 @@ describe("/api/reviews", () => {
   it("updates the review of its owner", async () => {
     const response = await request(app)
       .patch(`/api/reviews/${reviewId}`)
-      .set("Authorization", `Bearer ${authorToken}`)
+      .set("Cookie", authorCookie)
       .send({ rating: 5, content: "Mejor de lo que recordaba." });
 
     expect(response.status).toBe(200);
@@ -154,14 +155,14 @@ describe("/api/reviews", () => {
   it("hides someone else's review from updates and deletes", async () => {
     const patch = await request(app)
       .patch(`/api/reviews/${reviewId}`)
-      .set("Authorization", `Bearer ${otherToken}`)
+      .set("Cookie", otherCookie)
       .send({ rating: 1 });
 
     expect(patch.status).toBe(404);
 
     const remove = await request(app)
       .delete(`/api/reviews/${reviewId}`)
-      .set("Authorization", `Bearer ${otherToken}`);
+      .set("Cookie", otherCookie);
 
     expect(remove.status).toBe(404);
   });
@@ -169,7 +170,7 @@ describe("/api/reviews", () => {
   it("lets another user review the same movie", async () => {
     const response = await request(app)
       .post("/api/reviews")
-      .set("Authorization", `Bearer ${otherToken}`)
+      .set("Cookie", otherCookie)
       .send({ movieId, rating: 3, content: "A mí me pareció correcta." });
 
     expect(response.status).toBe(201);
@@ -181,7 +182,7 @@ describe("/api/reviews", () => {
   it("removes a review", async () => {
     const response = await request(app)
       .delete(`/api/reviews/${reviewId}`)
-      .set("Authorization", `Bearer ${authorToken}`);
+      .set("Cookie", authorCookie);
 
     expect(response.status).toBe(204);
 

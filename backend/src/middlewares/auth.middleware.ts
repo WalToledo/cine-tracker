@@ -1,14 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { AUTH_COOKIE } from "../lib/auth-cookie";
 
 interface AuthTokenPayload {
   sub: string;
   email: string;
 }
 
+// El token viaja sólo en la cookie httpOnly: el header `Authorization` ya no se
+// mira, para que el JavaScript de la página no pueda tener el token en ningún lado.
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+  const token = req.cookies?.[AUTH_COOKIE] as string | undefined;
 
   if (!token) {
     return res.status(401).json({ error: "Missing authorization token" });

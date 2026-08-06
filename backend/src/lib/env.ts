@@ -29,3 +29,10 @@ try {
     "DATABASE_URL is not a valid URL (expected mysql://user:password@host:port/database).",
   );
 }
+
+/**
+ * Origen exacto que CORS deja pasar con credenciales (la cookie de sesión). No entra
+ * en `REQUIRED`: el puerto por defecto de Vite cubre el caso normal de desarrollo y
+ * romper el arranque por esto sería desproporcionado.
+ */
+export const FRONTEND_URL = process.env.FRONTEND_URL?.trim() || "http://localhost:5173";

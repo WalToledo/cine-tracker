@@ -1,6 +1,14 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
 
-const TOKEN_KEY = 'cinetracker.token'
+// El JWT vive en una cookie httpOnly que este código no puede leer. Aquí sólo se
+// guarda el usuario que ya devuelven login y register: sirve para pintar la UI sin
+// esperar a una petición, y no es material sensible.
+const SESSION_KEY = 'cinetracker.user'
+
+// Quien ya usaba la app arrastra el JWT que se guardaba antes del Step 13. El
+// backend ya no lo acepta, pero sigue siendo un token firmado y vivo durante días
+// al alcance de cualquier XSS, que es justo lo que este cambio venía a evitar.
+localStorage.removeItem('cinetracker.token')
 
 export type WatchStatus = 'PENDING' | 'WATCHED'
 
@@ -15,7 +23,6 @@ export interface User {
 
 export interface AuthResponse {
   user: User
-  token: string
 }
 
 export interface RegisterInput {
@@ -79,63 +86,54 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-export function isAuthenticated(): boolean {
-  return getToken() !== null
-}
-
-/**
- * Lee el `sub` del payload del JWT para saber qué reseñas son propias.
- * Sólo sirve para decidir qué mostrar en la UI: el backend siempre revalida
- * la propiedad del recurso.
- */
-export function getCurrentUserId(): string | null {
-  const token = getToken()
-  if (!token) return null
-
-  const payload = token.split('.')[1]
-  if (!payload) return null
-
+/** Nunca lanza: un JSON manipulado a mano no puede tumbar la app entera. */
+export function getSessionUser(): User | null {
   try {
-    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    const decoded: unknown = JSON.parse(json)
-
-    if (decoded && typeof decoded === 'object' && 'sub' in decoded) {
-      const sub = (decoded as { sub: unknown }).sub
-      return typeof sub === 'string' ? sub : null
-    }
-
-    return null
+    const stored = localStorage.getItem(SESSION_KEY)
+    return stored ? (JSON.parse(stored) as User) : null
   } catch {
     return null
   }
 }
 
+export function saveSession(user: User): void {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user))
+}
+
+export function clearSession(): void {
+  localStorage.removeItem(SESSION_KEY)
+}
+
 /**
- * Wrapper sobre fetch que adjunta el JWT de localStorage en cada petición
- * y normaliza los errores del backend (`{ error: string }`) como ApiError.
+ * Optimista: dice que hay sesión mientras quede usuario guardado, sin saber si la
+ * cookie sigue viva. Lo que descubre una sesión muerta es el primer 401.
+ */
+export function isAuthenticated(): boolean {
+  return getSessionUser() !== null
+}
+
+/**
+ * Sirve para saber qué reseñas son propias. Sólo decide qué mostrar en la UI:
+ * el backend siempre revalida la propiedad del recurso.
+ */
+export function getCurrentUserId(): string | null {
+  return getSessionUser()?.id ?? null
+}
+
+/**
+ * Wrapper sobre fetch que normaliza los errores del backend (`{ error: string }`)
+ * como ApiError. `credentials: 'include'` es lo que hace viajar la cookie de sesión:
+ * sin él, el navegador no la manda a otro origen y todo responde 401.
  */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken()
-
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
 
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers })
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: 'include',
+  })
 
   if (response.status === 204) {
     return undefined as T
@@ -165,6 +163,12 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
+  },
+
+  // Sólo el backend puede borrar una cookie httpOnly, así que salir de verdad
+  // exige esta llamada además de limpiar el estado local.
+  logout(): Promise<void> {
+    return apiFetch<void>('/auth/logout', { method: 'POST' })
   },
 }
 

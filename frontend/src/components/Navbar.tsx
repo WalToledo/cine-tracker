@@ -5,7 +5,7 @@ import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import SearchSuggestions from './SearchSuggestions'
 import type { SuggestionGroup } from './SearchSuggestions'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { clearToken, isAuthenticated } from '../services/api'
+import { authApi, clearSession, isAuthenticated } from '../services/api'
 import { addRecentSearch, getRecentSearches } from '../services/recentSearches'
 import type { RecentMovie } from '../services/recentSearches'
 import { getTrendingMovies, searchMovies } from '../services/tmdb'
@@ -188,9 +188,17 @@ function Navbar() {
     setOpen(true)
   }
 
-  function handleLogout() {
-    clearToken()
-    navigate('/login')
+  // El `finally` es lo importante: si la llamada falla (red caída, backend
+  // apagado) el usuario tiene que salir igual del lado del cliente.
+  async function handleLogout() {
+    try {
+      await authApi.logout()
+    } catch {
+      // Sin nada que hacer: la cookie caducará sola.
+    } finally {
+      clearSession()
+      navigate('/login')
+    }
   }
 
   function handleSelect(movie: RecentMovie) {
