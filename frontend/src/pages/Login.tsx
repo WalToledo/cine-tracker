@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthForm from '../components/AuthForm'
 import type { AuthFormValues } from '../components/AuthForm'
 import { authApi, setToken } from '../services/api'
+import { translateError } from '../services/errors'
 
 function Login() {
   const navigate = useNavigate()
@@ -13,9 +14,14 @@ function Login() {
   const from = state?.from?.startsWith('/') ? state.from : '/'
 
   async function handleLogin({ email, password }: AuthFormValues) {
-    const { token } = await authApi.login(email, password)
-    setToken(token)
-    navigate(from, { replace: true })
+    try {
+      const { token } = await authApi.login(email, password)
+      setToken(token)
+      navigate(from, { replace: true })
+    } catch (err) {
+      // `AuthForm` pinta lo que se lance; sin esto llegaba el inglés del backend.
+      throw new Error(translateError(err, 'No se pudo iniciar sesión'))
+    }
   }
 
   return (

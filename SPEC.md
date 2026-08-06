@@ -32,7 +32,8 @@ cinetracker/
 │   │   │   ├── prisma.ts
 │   │   │   └── user.ts
 │   │   ├── middlewares/
-│   │   │   └── auth.middleware.ts
+│   │   │   ├── auth.middleware.ts
+│   │   │   └── error.middleware.ts
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── movies.routes.ts
@@ -46,9 +47,11 @@ cinetracker/
 │   │   │       └── index.d.ts
 │   │   ├── __tests__/
 │   │   │   ├── auth.test.ts
+│   │   │   ├── globalSetup.ts
 │   │   │   ├── health.test.ts
 │   │   │   ├── movies.test.ts
 │   │   │   ├── reviews.test.ts
+│   │   │   ├── setup.ts
 │   │   │   ├── users.test.ts
 │   │   │   └── watchlist.test.ts
 │   │   ├── app.ts
@@ -84,6 +87,7 @@ cinetracker/
 │   │   │   └── Watchlist.tsx
 │   │   ├── services/
 │   │   │   ├── api.ts
+│   │   │   ├── errors.ts
 │   │   │   ├── recentSearches.ts
 │   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
@@ -238,18 +242,17 @@ enum WatchStatus {
   `components/AuthForm.tsx` and `pages/Register.tsx` render the new inputs; "Mi Perfil" link in
   `components/Navbar.tsx`.
 
-### Step 10: Hardening & Documentation Debt (PENDING)
-- **Startup & environment:** add a `postinstall` that runs `prisma generate` (a fresh clone fails
-  because the generated client is gitignored); fail fast when `JWT_SECRET` or `DATABASE_URL` are
-  missing, instead of answering 401 on every request or crashing with an unnamed `TypeError`; move
-  `VITE_API_URL` out of the root `.env.example` into `frontend/.env`, the only place Vite reads it.
-- **Backend robustness:** add an error middleware returning `{ error }` instead of HTML with a
-  stack trace; set `NODE_ENV`; warn on startup when `TMDB_API_KEY` is missing (production silently
-  serves mock movies); exclude `__tests__` from the build so `dist/` stops shipping the test suites.
-- **Frontend fixes:** the suggestions panel keeps a stale state while trending is still loading
-  (`components/Navbar.tsx`: the `useRef` guard is never reset); `pages/Watchlist.tsx` does not
-  handle 401 and `pages/Login.tsx` does not translate, so both surface English backend messages;
-  turn on strict mode.
-- **Test isolation:** the suites run in parallel against the development database, separated only
-  by hand-picked random values. Point them at a dedicated test database, and stub the catalogue in
-  `App.test.tsx`, which currently issues a real network request.
+### Step 10: Hardening & Documentation Debt (COMPLETED)
+- **Startup:** `postinstall` running `prisma generate` in `backend/package.json`; `src/lib/env.ts`
+  now fails fast when `DATABASE_URL` or `JWT_SECRET` are missing or unparseable; `VITE_API_URL`
+  moved out of the root `.env.example` into the new `frontend/.env.example`.
+- **Backend:** new `middlewares/error.middleware.ts` (`errorHandler` + `notFoundHandler`) closing
+  `app.ts` with the `{ error }` contract; `NODE_ENV` set in the scripts through `cross-env`;
+  `index.ts` warns when `TMDB_API_KEY` is absent; `tsconfig.json` excludes `src/__tests__`.
+- **Frontend:** new `services/errors.ts` (`translateError`, `isUnauthorized`) shared by
+  `pages/Login.tsx`, `Register.tsx` and `Watchlist.tsx`, which now redirects on 401; the trending
+  guard in `components/Navbar.tsx` is released on failure and on unmount; `strict` on in
+  `tsconfig.app.json`.
+- **Testing:** an optional root `.env.test` (see `.env.test.example`) points the backend suites at
+  their own database, wired through the new `src/__tests__/setup.ts` and `globalSetup.ts`, and the
+  suites now run serially.
