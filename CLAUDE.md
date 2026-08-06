@@ -2,7 +2,8 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. Los 9 steps están COMPLETED.
+conviene actualizarlo al cerrar uno. Los steps 1-9 están COMPLETED; el Step 10
+(hardening y deuda técnica) sigue PENDING.
 
 ## Comandos (desde la raíz)
 
@@ -22,10 +23,12 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - La API Key de TMDB vive **sólo en el servidor** (`TMDB_API_KEY`); el navegador consume
   películas por el proxy `/api/movies`. No reintroducir `VITE_TMDB_API_KEY`.
 - Prisma 7 usa el generador `prisma-client` con salida en `backend/src/generated/prisma`
-  (no `prisma-client-js`), y `DATABASE_URL` se lee desde `prisma.config.ts`, no del bloque
-  `datasource`. Importar el cliente desde esa ruta generada, **no** desde `@prisma/client`.
-  La sección 4 de `SPEC.md` está desactualizada en ese punto: no revertir `schema.prisma`
-  a su texto literal, rompe la app. Los modelos y relaciones sí coinciden.
+  (no `prisma-client-js`). Importar el cliente desde esa ruta generada, **no** desde
+  `@prisma/client`.
+- El bloque `datasource` de `schema.prisma` no lleva `url` a propósito, y son dos caminos
+  distintos: el **CLI** (`migrate`, `generate`) lee `DATABASE_URL` desde `prisma.config.ts`;
+  en **tiempo de ejecución** el cliente no la usa, porque `src/lib/prisma.ts` le pasa un
+  `PrismaMariaDb` de `@prisma/adapter-mariadb` construido con esa URL parseada a mano.
 - Tras `prisma migrate dev` hay que correr `npx prisma generate`, o el modelo nuevo llega
   `undefined` en tiempo de ejecución.
 - El generador lleva `moduleFormat = "cjs"` a propósito: el backend compila a CommonJS y,
@@ -37,8 +40,10 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
 - Las rutas literales van antes que las paramétricas en el mismo router: en
   `movies.routes.ts`, `/trending` y `/search` preceden a `/:id`.
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`
-  corren sin base. Un `pool timeout` de Prisma con `active=0 idle=0` suele ser un handshake
-  `caching_sha2_password` fallido, no la base caída.
+  corren sin base, pero **no sin `DATABASE_URL`**: importan `app.ts`, que arrastra a Prisma, y
+  `src/lib/prisma.ts` hace `new URL(process.env.DATABASE_URL!)` al cargarse. Basta con que la
+  variable sea parseable aunque no apunte a nada vivo. Un `pool timeout` de Prisma con
+  `active=0 idle=0` suele ser un handshake `caching_sha2_password` fallido, no la base caída.
 - El índice único de `username` hereda la collation `utf8mb4_unicode_ci`, que es **insensible a
   mayúsculas**: `Walter` y `walter` colisionan. Nunca comparar usernames con `===` en JavaScript;
   `auth.controller.ts` usa dos `findUnique` separados para distinguir el 409 de email del de

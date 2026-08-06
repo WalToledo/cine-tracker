@@ -19,6 +19,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 cinetracker/
 ├── backend/
 │   ├── prisma/
+│   ├── prisma.config.ts
 │   ├── src/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
@@ -31,6 +32,7 @@ cinetracker/
 │   │   │   ├── prisma.ts
 │   │   │   └── user.ts
 │   │   ├── middlewares/
+│   │   │   └── auth.middleware.ts
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── movies.routes.ts
@@ -39,6 +41,9 @@ cinetracker/
 │   │   │   └── watchlist.routes.ts
 │   │   ├── services/
 │   │   │   └── tmdb.service.ts
+│   │   ├── types/
+│   │   │   └── express/
+│   │   │       └── index.d.ts
 │   │   ├── __tests__/
 │   │   │   ├── auth.test.ts
 │   │   │   ├── health.test.ts
@@ -179,7 +184,7 @@ enum WatchStatus {
 ### Step 4: Frontend Core (COMPLETED)
 - Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
 - Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
-- Build Home page (fetch trending from TMDB; falls back to mock data when the API key is absent — see Step 6).
+- Build Home page (fetch trending through the backend proxy — see Step 6).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
 - `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
 
@@ -232,3 +237,19 @@ enum WatchStatus {
 - **Frontend:** new protected `pages/Profile.tsx` with the stat cards and inline editing;
   `components/AuthForm.tsx` and `pages/Register.tsx` render the new inputs; "Mi Perfil" link in
   `components/Navbar.tsx`.
+
+### Step 10: Hardening & Documentation Debt (PENDING)
+- **Startup & environment:** add a `postinstall` that runs `prisma generate` (a fresh clone fails
+  because the generated client is gitignored); fail fast when `JWT_SECRET` or `DATABASE_URL` are
+  missing, instead of answering 401 on every request or crashing with an unnamed `TypeError`; move
+  `VITE_API_URL` out of the root `.env.example` into `frontend/.env`, the only place Vite reads it.
+- **Backend robustness:** add an error middleware returning `{ error }` instead of HTML with a
+  stack trace; set `NODE_ENV`; warn on startup when `TMDB_API_KEY` is missing (production silently
+  serves mock movies); exclude `__tests__` from the build so `dist/` stops shipping the test suites.
+- **Frontend fixes:** the suggestions panel keeps a stale state while trending is still loading
+  (`components/Navbar.tsx`: the `useRef` guard is never reset); `pages/Watchlist.tsx` does not
+  handle 401 and `pages/Login.tsx` does not translate, so both surface English backend messages;
+  turn on strict mode.
+- **Test isolation:** the suites run in parallel against the development database, separated only
+  by hand-picked random values. Point them at a dedicated test database, and stub the catalogue in
+  `App.test.tsx`, which currently issues a real network request.
