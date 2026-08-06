@@ -15,6 +15,21 @@ const MESSAGES: Record<string, string> = {
   'you already reviewed this movie': 'Ya has reseñado esta película',
   'review not found': 'Esa reseña ya no existe',
   'user not found': 'No encontramos tu cuenta',
+
+  // Validación (Step 11). Las claves son el texto ya interpolado que producen
+  // `backend/src/lib/password.ts` y `backend/src/lib/user.ts`: los workspaces no
+  // comparten módulos, así que cambiar allí un límite obliga a copiarlo aquí.
+  'email, password, firstName, lastName and username are required':
+    'Rellena todos los campos',
+  'email must be a valid email address': 'Ese email no es válido',
+  'password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a special character':
+    'La contraseña no cumple los requisitos',
+  'password must be at most 72 characters': 'La contraseña es demasiado larga',
+  'firstName and lastName are required and must be at most 50 characters':
+    'Revisa el nombre y los apellidos',
+  'username must be 3-30 characters and contain only letters, numbers or underscores':
+    'El usuario admite 3-30 letras, números o guion bajo',
+  'firstName, lastName or username is required': 'Cambia algún dato antes de guardar',
 }
 
 /**

@@ -22,7 +22,7 @@ describe("/api/reviews", () => {
   beforeAll(async () => {
     const author = await request(app).post("/api/auth/register").send({
       email: authorEmail,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Auto",
       lastName: "Ra",
       username: authorUsername,
@@ -34,7 +34,7 @@ describe("/api/reviews", () => {
 
     const other = await request(app).post("/api/auth/register").send({
       email: otherEmail,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Otra",
       lastName: "Persona",
       username: otherUsername,
@@ -77,6 +77,16 @@ describe("/api/reviews", () => {
       .post("/api/reviews")
       .set("Authorization", `Bearer ${authorToken}`)
       .send({ movieId, rating: 9, content: "Puntuación inválida" });
+
+    expect(response.status).toBe(400);
+  });
+
+  // El schema no coacciona: un rating en texto es un error del cliente.
+  it("rejects a rating sent as a string", async () => {
+    const response = await request(app)
+      .post("/api/reviews")
+      .set("Authorization", `Bearer ${authorToken}`)
+      .send({ movieId, rating: "4", content: "Puntuación en texto" });
 
     expect(response.status).toBe(400);
   });

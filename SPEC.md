@@ -29,11 +29,20 @@ cinetracker/
 │   │   │   └── watchlist.controller.ts
 │   │   ├── lib/
 │   │   │   ├── env.ts
+│   │   │   ├── password.ts
 │   │   │   ├── prisma.ts
 │   │   │   └── user.ts
 │   │   ├── middlewares/
 │   │   │   ├── auth.middleware.ts
-│   │   │   └── error.middleware.ts
+│   │   │   ├── error.middleware.ts
+│   │   │   └── validate.middleware.ts
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   ├── common.schema.ts
+│   │   │   ├── movies.schema.ts
+│   │   │   ├── review.schema.ts
+│   │   │   ├── user.schema.ts
+│   │   │   └── watchlist.schema.ts
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── movies.routes.ts
@@ -50,6 +59,7 @@ cinetracker/
 │   │   │   ├── globalSetup.ts
 │   │   │   ├── health.test.ts
 │   │   │   ├── movies.test.ts
+│   │   │   ├── password.test.ts
 │   │   │   ├── reviews.test.ts
 │   │   │   ├── setup.ts
 │   │   │   ├── users.test.ts
@@ -61,10 +71,13 @@ cinetracker/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── AuthForm.tsx
+│   │   │   ├── AuthForm.test.tsx
 │   │   │   ├── Layout.tsx
 │   │   │   ├── MovieCard.tsx
 │   │   │   ├── Navbar.tsx
 │   │   │   ├── Navbar.test.tsx
+│   │   │   ├── PasswordStrength.tsx
+│   │   │   ├── PasswordStrength.test.tsx
 │   │   │   ├── ProtectedRoute.tsx
 │   │   │   ├── ReviewForm.tsx
 │   │   │   ├── ReviewList.tsx
@@ -88,6 +101,8 @@ cinetracker/
 │   │   ├── services/
 │   │   │   ├── api.ts
 │   │   │   ├── errors.ts
+│   │   │   ├── password.ts
+│   │   │   ├── password.test.ts
 │   │   │   ├── recentSearches.ts
 │   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
@@ -256,3 +271,28 @@ enum WatchStatus {
 - **Testing:** an optional root `.env.test` (see `.env.test.example`) points the backend suites at
   their own database, wired through the new `src/__tests__/setup.ts` and `globalSetup.ts`, and the
   suites now run serially.
+
+### Step 11: Input Validation & Password Policy (COMPLETED)
+- **Backend:** Zod validates every body and query through the new
+  `middlewares/validate.middleware.ts` and `schemas/` (auth, user, review, watchlist, movies);
+  `lib/user.ts` swaps its `parse*` helpers for schema factories.
+- **Backend:** the new `lib/password.ts` owns the register policy — 8+ characters with an
+  uppercase, a lowercase, a number and a special character. Login does not apply it, so
+  pre-Step-11 accounts keep working. Emails are now format-checked and lowercased.
+- **Frontend:** new `services/password.ts` and `components/PasswordStrength.tsx` (weak / normal /
+  strong bar plus requirement checklist); `AuthForm.tsx` gains the `withPasswordRules` prop and a
+  show/hide password toggle.
+- **Frontend:** `services/errors.ts` covers the new validation messages and `pages/Profile.tsx`
+  drops its duplicated translator.
+
+### Step 12: Password Change (PENDING)
+- **Backend:** new `PATCH /api/users/password` in `user.controller.ts` and `user.routes.ts`
+  (behind `requireAuth`), taking `{ currentPassword, newPassword }`. A wrong current password
+  answers **400**, not 401: the session is valid and a 401 would kick the user out to `/login`.
+- **Backend:** `schemas/user.schema.ts` gains `changePasswordSchema`, reusing `passwordSchema()`
+  from `lib/password.ts` for `newPassword` only — `currentPassword` is just checked as non-empty
+  so pre-Step-11 accounts can still authenticate themselves.
+- **Frontend:** a password section in `pages/Profile.tsx` with both fields, reusing
+  `components/PasswordStrength.tsx`; `services/api.ts` adds `usersApi.changePassword()`.
+- **Frontend:** `services/errors.ts` translates the new literals for a wrong current password and
+  for a new password that repeats the old one.

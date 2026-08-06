@@ -26,7 +26,7 @@ describe("/api/users/profile", () => {
   beforeAll(async () => {
     const owner = await request(app).post("/api/auth/register").send({
       email,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Walter",
       lastName: "Toledo",
       username,
@@ -38,7 +38,7 @@ describe("/api/users/profile", () => {
 
     const other = await request(app).post("/api/auth/register").send({
       email: otherEmail,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Otra",
       lastName: "Persona",
       username: otherUsername,
@@ -143,6 +143,16 @@ describe("/api/users/profile", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe("firstName, lastName or username is required");
+  });
+
+  // Los tipos se rechazan en el schema: sin eso, un número llegaba hasta Prisma.
+  it("rejects a firstName that is not a string", async () => {
+    const response = await request(app)
+      .patch("/api/users/profile")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ firstName: 5 });
+
+    expect(response.status).toBe(400);
   });
 
   it("rejects an invalid username", async () => {

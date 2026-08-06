@@ -28,6 +28,7 @@ function Register() {
       title="Crear cuenta"
       submitLabel="Registrarme"
       withProfileFields
+      withPasswordRules
       onSubmit={handleRegister}
       footer={
         <>

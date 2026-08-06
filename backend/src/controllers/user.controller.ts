@@ -1,14 +1,8 @@
 import type { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { WatchStatus } from "../generated/prisma/enums";
-import {
-  NAME_ERROR,
-  USERNAME_ERROR,
-  parseName,
-  parseUsername,
-  publicUserSelect,
-  uniqueConflictError,
-} from "../lib/user";
+import { publicUserSelect, uniqueConflictError } from "../lib/user";
+import type { UpdateProfileBody } from "../schemas/user.schema";
 
 export async function getProfile(req: Request, res: Response) {
   const userId = req.user!.id;
@@ -31,39 +25,11 @@ export async function getProfile(req: Request, res: Response) {
   return res.status(200).json({ user, stats: { watched, pending, reviews } });
 }
 
-export async function updateProfile(req: Request, res: Response) {
+export async function updateProfile(req: Request<never, unknown, UpdateProfileBody>, res: Response) {
   const userId = req.user!.id;
-  const { firstName, lastName, username } = req.body ?? {};
-
-  if (firstName === undefined && lastName === undefined && username === undefined) {
-    return res.status(400).json({ error: "firstName, lastName or username is required" });
-  }
-
-  const data: { firstName?: string; lastName?: string; username?: string } = {};
-
-  if (firstName !== undefined) {
-    const parsed = parseName(firstName);
-    if (parsed === null) {
-      return res.status(400).json({ error: NAME_ERROR });
-    }
-    data.firstName = parsed;
-  }
-
-  if (lastName !== undefined) {
-    const parsed = parseName(lastName);
-    if (parsed === null) {
-      return res.status(400).json({ error: NAME_ERROR });
-    }
-    data.lastName = parsed;
-  }
-
-  if (username !== undefined) {
-    const parsed = parseUsername(username);
-    if (parsed === null) {
-      return res.status(400).json({ error: USERNAME_ERROR });
-    }
-    data.username = parsed;
-  }
+  // Zod omite del resultado las claves que no venían, así que el body validado ya
+  // es exactamente el `data` del update.
+  const data = req.body;
 
   const existing = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
   if (!existing) {

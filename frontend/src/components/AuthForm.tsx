@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import PasswordStrength from './PasswordStrength'
+import { MAX_LENGTH, MIN_LENGTH, checkPassword } from '../services/password'
 
 export interface AuthFormValues {
   email: string
@@ -15,11 +17,24 @@ interface AuthFormProps {
   submitLabel: string
   /** El registro pide nombre, apellidos y usuario; el login sólo email y contraseña. */
   withProfileFields?: boolean
+  /**
+   * Sólo el registro impone la política de contraseñas. Va aparte de
+   * `withProfileFields` porque son cosas distintas, y sobre todo porque el login
+   * debe seguir dejando entrar a las cuentas anteriores al Step 11.
+   */
+  withPasswordRules?: boolean
   onSubmit: (values: AuthFormValues) => Promise<void>
   footer: ReactNode
 }
 
-function AuthForm({ title, submitLabel, withProfileFields, onSubmit, footer }: AuthFormProps) {
+function AuthForm({
+  title,
+  submitLabel,
+  withProfileFields,
+  withPasswordRules,
+  onSubmit,
+  footer,
+}: AuthFormProps) {
   const [values, setValues] = useState<AuthFormValues>({
     email: '',
     password: '',
@@ -29,6 +44,9 @@ function AuthForm({ title, submitLabel, withProfileFields, onSubmit, footer }: A
   })
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const blockedByPassword = Boolean(withPasswordRules) && !checkPassword(values.password).isValid
 
   function update(field: keyof AuthFormValues, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -137,17 +155,40 @@ function AuthForm({ title, submitLabel, withProfileFields, onSubmit, footer }: A
           <label htmlFor="password" className={labelClass}>
             Contraseña
           </label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete={withProfileFields ? 'new-password' : 'current-password'}
-            value={values.password}
-            onChange={(event) => update('password', event.target.value)}
-            placeholder="••••••••"
-            className={inputClass}
-          />
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              required
+              minLength={MIN_LENGTH}
+              maxLength={MAX_LENGTH}
+              autoComplete={withProfileFields ? 'new-password' : 'current-password'}
+              aria-describedby={withPasswordRules ? 'password-strength' : undefined}
+              value={values.password}
+              onChange={(event) => update('password', event.target.value)}
+              placeholder="••••••••"
+              className={`${inputClass} pr-10`}
+            />
+            {/* `type="button"` es obligatorio: dentro de un form, un botón sin tipo lo envía. */}
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500 transition-colors hover:text-neutral-300"
+            >
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Eye className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+
+          {/* Con el campo vacío no se pinta: recibir cinco cruces rojas al abrir
+              el formulario es acusatorio y no ayuda a nadie. */}
+          {withPasswordRules && values.password !== '' && (
+            <PasswordStrength id="password-strength" password={values.password} />
+          )}
         </div>
 
         {error && (
@@ -158,7 +199,7 @@ function AuthForm({ title, submitLabel, withProfileFields, onSubmit, footer }: A
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || blockedByPassword}
           className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-neutral-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-400"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}

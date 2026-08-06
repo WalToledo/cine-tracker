@@ -31,7 +31,7 @@ function fillForm() {
   fireEvent.change(screen.getByLabelText('Apellidos'), { target: { value: 'Toledo' } })
   fireEvent.change(screen.getByLabelText('Nombre de usuario'), { target: { value: 'cinefila' } })
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'walter@example.com' } })
-  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'SuperSecret123' } })
+  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'SuperSecret123!' } })
 }
 
 describe('Register', () => {
@@ -65,7 +65,7 @@ describe('Register', () => {
     expect(await screen.findByText('inicio')).toBeInTheDocument()
     expect(register).toHaveBeenCalledWith({
       email: 'walter@example.com',
-      password: 'SuperSecret123',
+      password: 'SuperSecret123!',
       firstName: 'Walter',
       lastName: 'Toledo',
       username: 'cinefila',

@@ -17,7 +17,7 @@ describe("/api/watchlist", () => {
   beforeAll(async () => {
     const response = await request(app).post("/api/auth/register").send({
       email,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Watch",
       lastName: "Lister",
       username,
@@ -53,6 +53,16 @@ describe("/api/watchlist", () => {
     expect(response.body.item.status).toBe("PENDING");
 
     itemId = response.body.item.id;
+  });
+
+  // El schema no coacciona: el id de TMDB tiene que llegar como número.
+  it("rejects a movieId sent as a string", async () => {
+    const response = await request(app)
+      .post("/api/watchlist")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ movieId: "550", title: "Fight Club" });
+
+    expect(response.status).toBe(400);
   });
 
   it("rejects the same movie twice", async () => {
