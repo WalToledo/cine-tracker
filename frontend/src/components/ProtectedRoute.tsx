@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { isAuthenticated } from '../services/api'
 
-/** Deja pasar sólo si hay token en localStorage; si no, redirige a /login. */
+/** Deja pasar sólo si hay sesión guardada; si no, redirige a /login. */
 function ProtectedRoute() {
   const location = useLocation()
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import Navbar from './Navbar'
+import { saveSession } from '../services/api'
 import type { Movie } from '../services/tmdb'
 
 const MATRIX: Movie = {
@@ -206,8 +207,15 @@ describe('Navbar links', () => {
   })
 
   it('shows the profile link with a session', () => {
-    // El `beforeEach` limpia el almacenamiento, así que el token se pone aquí.
-    localStorage.setItem('cinetracker.token', 'a.b.c')
+    // El `beforeEach` limpia el almacenamiento, así que la sesión se pone aquí.
+    saveSession({
+      id: 'user-1',
+      email: 'walter@example.com',
+      username: 'cinefila',
+      firstName: 'Walter',
+      lastName: 'Toledo',
+      createdAt: '2026-08-01T10:00:00.000Z',
+    })
 
     renderNavbar()
 

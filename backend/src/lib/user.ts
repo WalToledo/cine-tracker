@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const MAX_NAME_LENGTH = 50;
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 30;
@@ -21,14 +23,23 @@ export const publicUserSelect = {
 } as const;
 
 /**
+ * Son factories y no schemas ya montados porque el mensaje de "falta el campo"
+ * cambia según el endpoint: en el registro es el agregado de todos los campos
+ * obligatorios, y en el PATCH del perfil es el literal del propio campo.
+ *
  * No se restringe el juego de caracteres: los nombres reales llevan tildes,
  * apóstrofos, guiones y espacios, y filtrarlos excluiría a gente de verdad.
  */
-export function parseName(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (trimmed === "" || trimmed.length > MAX_NAME_LENGTH) return null;
-  return trimmed;
+export function nameSchema(typeError: string) {
+  return (
+    z
+      .string(typeError)
+      .min(1, typeError)
+      .trim()
+      // Tras el `trim`, esto es lo que rechaza un nombre de sólo espacios.
+      .min(1, NAME_ERROR)
+      .max(MAX_NAME_LENGTH, NAME_ERROR)
+  );
 }
 
 /**
@@ -36,12 +47,14 @@ export function parseName(value: unknown): string | null {
  * decida la collation `utf8mb4_unicode_ci` de MySQL, que es insensible a
  * mayúsculas: "Walter" y "walter" son el mismo usuario a propósito.
  */
-export function parseUsername(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (trimmed.length < MIN_USERNAME_LENGTH || trimmed.length > MAX_USERNAME_LENGTH) return null;
-  if (!USERNAME_PATTERN.test(trimmed)) return null;
-  return trimmed;
+export function usernameSchema(typeError: string) {
+  return z
+    .string(typeError)
+    .min(1, typeError)
+    .trim()
+    .min(MIN_USERNAME_LENGTH, USERNAME_ERROR)
+    .max(MAX_USERNAME_LENGTH, USERNAME_ERROR)
+    .regex(USERNAME_PATTERN, USERNAME_ERROR);
 }
 
 /**

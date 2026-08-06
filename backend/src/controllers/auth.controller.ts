@@ -2,42 +2,21 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
-import {
-  NAME_ERROR,
-  USERNAME_ERROR,
-  parseName,
-  parseUsername,
-  publicUserSelect,
-  uniqueConflictError,
-} from "../lib/user";
+import { clearAuthCookie, setAuthCookie, TOKEN_TTL_SECONDS } from "../lib/auth-cookie";
+import { publicUserSelect, uniqueConflictError } from "../lib/user";
+import type { LoginBody, RegisterBody } from "../schemas/auth.schema";
 
 // El payload se queda en `sub` + `email` a propósito: el username es editable y
 // un token de 7 días arrastraría el valor viejo hasta su caducidad.
 function signToken(user: { id: string; email: string }) {
   return jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET as string, {
-    expiresIn: "7d",
+    expiresIn: TOKEN_TTL_SECONDS,
   });
 }
 
-export async function register(req: Request, res: Response) {
-  const { email, password, firstName, lastName, username } = req.body ?? {};
-
-  if (!email || !password || !firstName || !lastName || !username) {
-    return res
-      .status(400)
-      .json({ error: "email, password, firstName, lastName and username are required" });
-  }
-
-  const parsedFirstName = parseName(firstName);
-  const parsedLastName = parseName(lastName);
-  if (parsedFirstName === null || parsedLastName === null) {
-    return res.status(400).json({ error: NAME_ERROR });
-  }
-
-  const parsedUsername = parseUsername(username);
-  if (parsedUsername === null) {
-    return res.status(400).json({ error: USERNAME_ERROR });
-  }
+// El body ya llega validado y normalizado por `validateBody(registerSchema)`.
+export async function register(req: Request<never, unknown, RegisterBody>, res: Response) {
+  const { email, password, firstName, lastName, username } = req.body;
 
   // Dos consultas separadas en vez de un `OR`: así cada conflicto tiene su
   // mensaje. Discriminarlos en JavaScript sería incorrecto porque `===` distingue
@@ -47,7 +26,7 @@ export async function register(req: Request, res: Response) {
     return res.status(409).json({ error: "email already registered" });
   }
 
-  const existingUsername = await prisma.user.findUnique({ where: { username: parsedUsername } });
+  const existingUsername = await prisma.user.findUnique({ where: { username } });
   if (existingUsername) {
     return res.status(409).json({ error: "username already taken" });
   }
@@ -57,13 +36,7 @@ export async function register(req: Request, res: Response) {
   let user;
   try {
     user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        firstName: parsedFirstName,
-        lastName: parsedLastName,
-        username: parsedUsername,
-      },
+      data: { email, password: hashedPassword, firstName, lastName, username },
       select: publicUserSelect,
     });
   } catch (err) {
@@ -76,17 +49,15 @@ export async function register(req: Request, res: Response) {
     throw err;
   }
 
-  const token = signToken(user);
+  // El token no vuelve en el body a propósito: si el navegador pudiera leerlo,
+  // la cookie httpOnly no serviría de nada.
+  setAuthCookie(res, signToken(user));
 
-  return res.status(201).json({ user, token });
+  return res.status(201).json({ user });
 }
 
-export async function login(req: Request, res: Response) {
-  const { email, password } = req.body ?? {};
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "email and password are required" });
-  }
+export async function login(req: Request<never, unknown, LoginBody>, res: Response) {
+  const { email, password } = req.body;
 
   const user = await prisma.user.findUnique({
     where: { email },
@@ -102,7 +73,14 @@ export async function login(req: Request, res: Response) {
   }
 
   const { password: _password, ...publicUser } = user;
-  const token = signToken(publicUser);
-  
-  return res.status(200).json({ user: publicUser, token });
+  setAuthCookie(res, signToken(publicUser));
+
+  return res.status(200).json({ user: publicUser });
+}
+
+// Público a propósito: cerrar sesión con la cookie ya caducada tiene que funcionar
+// igual, y `requireAuth` respondería 401 justo cuando el usuario quiere salir.
+export function logout(_req: Request, res: Response) {
+  clearAuthCookie(res);
+  return res.status(204).send();
 }

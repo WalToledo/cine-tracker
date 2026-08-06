@@ -2,7 +2,7 @@
 
 Monorepo con npm workspaces: `backend` (Express 5 + Prisma 7 + MySQL) y `frontend`
 (React 19 + Vite + Tailwind 4). `SPEC.md` es la fuente de verdad del plan por steps —
-conviene actualizarlo al cerrar uno. Los 10 steps están COMPLETED.
+conviene actualizarlo al cerrar uno. Los 11 steps están COMPLETED.
 
 ## Comandos (desde la raíz)
 
@@ -42,6 +42,37 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
   ejecutar el `dist`).
 - En Express 5 un handler con `:id` necesita `Request<{ id: string }>` explícito o `tsc`
   falla. Ejemplo en `backend/src/controllers/review.controller.ts`.
+- En Express 5 `req.query` es un **getter del prototipo**: asignarlo lanza un `TypeError` que
+  `tsc` no detecta. Por eso `validateQuery` deja el resultado en `req.validatedQuery`
+  (declarado en `types/express/index.d.ts`) y `searchMovies` lo lee de ahí. Los params de ruta
+  se siguen validando a mano por el mismo motivo.
+- El contrato de error es `{ error }` con **un solo** mensaje, así que `validate.middleware.ts`
+  se queda con `issues[0]`. Para que no dependa del orden interno de Zod, todos los checks de un
+  campo comparten mensaje y los de "falta el campo" comparten el agregado del endpoint
+  (`REGISTER_REQUIRED_ERROR`). Cambiar eso rompe `auth.test.ts` de formas poco obvias.
+- `requireAuth` va **antes** de `validate` en cada router: al revés, una petición sin token
+  recibiría el 400 del schema en vez del 401 que asertan las suites.
+- El JWT viaja en una cookie `HttpOnly` (`cinetracker_token`) que emite `lib/auth-cookie.ts`,
+  no en el body ni en `Authorization: Bearer` — `requireAuth` ya no mira ese header. Tres
+  piezas tienen que estar de acuerdo o todo responde 401 sin explicar por qué: `apiFetch` manda
+  `credentials: 'include'`, el CORS de `app.ts` lleva un `origin` **explícito** (`FRONTEND_URL`)
+  con `credentials: true` —con `origin: "*"` el navegador descarta la respuesta en cuanto hay
+  credenciales—, y `clearAuthCookie` repite las mismas opciones con las que se emitió, o el
+  navegador no la reconoce y no la borra. `expiresIn` y `maxAge` salen de la misma constante.
+- En el frontend `localStorage` guarda el **usuario**, nunca el token (`cinetracker.user`).
+  `isAuthenticated()` es optimista: dice que hay sesión mientras quede ese objeto, sin saber si
+  la cookie sigue viva. Lo que descubre una sesión muerta es el primer 401, que limpia el
+  usuario guardado (`handleUnauthorized` en `services/errors.ts`).
+- El logout necesita `POST /api/auth/logout`: sólo el servidor puede borrar una cookie
+  `HttpOnly`. Esa ruta es pública a propósito — con `requireAuth` respondería 401 justo cuando
+  el usuario quiere salir. En `Navbar.tsx` la limpieza local va en un `finally` para que un
+  fallo de red no deje al usuario dentro.
+- Las reglas de contraseña están duplicadas en `backend/src/lib/password.ts` y
+  `frontend/src/services/password.ts` (workspaces sin módulos compartidos). Hay que cambiarlas a
+  la vez, o la barra se pone verde sobre algo que el backend rechaza con un 400. Las dos tablas
+  de casos gemelas de sus tests son la red.
+- El login **no** aplica la política de contraseñas, a propósito: las cuentas anteriores al Step
+  11 tienen contraseñas que ya no pasarían el registro y quedarían fuera para siempre.
 - Las rutas literales van antes que las paramétricas en el mismo router: en
   `movies.routes.ts`, `/trending` y `/search` preceden a `/:id`.
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import app from "../app";
 import prisma from "../lib/prisma";
+import { authCookie } from "./helpers";
 
 describe("/api/watchlist", () => {
   const email = `watchlist-${randomUUID()}@example.com`;
@@ -10,14 +11,14 @@ describe("/api/watchlist", () => {
   const username = `watchlist_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const movieId = 550;
 
-  let token: string;
+  let cookie: string;
   let userId: string;
   let itemId: string;
 
   beforeAll(async () => {
     const response = await request(app).post("/api/auth/register").send({
       email,
-      password: "SuperSecret123",
+      password: "SuperSecret123!",
       firstName: "Watch",
       lastName: "Lister",
       username,
@@ -25,7 +26,7 @@ describe("/api/watchlist", () => {
 
     expect(response.status).toBe(201);
 
-    token = response.body.token;
+    cookie = authCookie(response);
     userId = response.body.user.id;
   });
 
@@ -35,7 +36,7 @@ describe("/api/watchlist", () => {
     await prisma.$disconnect();
   });
 
-  it("rejects requests without a token", async () => {
+  it("rejects requests without a session cookie", async () => {
     const response = await request(app).get("/api/watchlist");
 
     expect(response.status).toBe(401);
@@ -44,7 +45,7 @@ describe("/api/watchlist", () => {
   it("adds a movie to the watchlist", async () => {
     const response = await request(app)
       .post("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ movieId, title: "Fight Club", posterPath: "/poster.jpg" });
 
     expect(response.status).toBe(201);
@@ -55,10 +56,20 @@ describe("/api/watchlist", () => {
     itemId = response.body.item.id;
   });
 
+  // El schema no coacciona: el id de TMDB tiene que llegar como número.
+  it("rejects a movieId sent as a string", async () => {
+    const response = await request(app)
+      .post("/api/watchlist")
+      .set("Cookie", cookie)
+      .send({ movieId: "550", title: "Fight Club" });
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects the same movie twice", async () => {
     const response = await request(app)
       .post("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ movieId, title: "Fight Club" });
 
     expect(response.status).toBe(409);
@@ -67,7 +78,7 @@ describe("/api/watchlist", () => {
   it("updates the status of an item", async () => {
     const response = await request(app)
       .patch(`/api/watchlist/${itemId}`)
-      .set("Authorization", `Bearer ${token}`)
+      .set("Cookie", cookie)
       .send({ status: "WATCHED" });
 
     expect(response.status).toBe(200);
@@ -77,7 +88,7 @@ describe("/api/watchlist", () => {
   it("lists the watchlist of the authenticated user", async () => {
     const response = await request(app)
       .get("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(response.status).toBe(200);
     expect(response.body.items).toHaveLength(1);
@@ -91,13 +102,13 @@ describe("/api/watchlist", () => {
   it("removes a movie from the watchlist", async () => {
     const response = await request(app)
       .delete(`/api/watchlist/${itemId}`)
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(response.status).toBe(204);
 
     const list = await request(app)
       .get("/api/watchlist")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Cookie", cookie);
 
     expect(list.body.items).toHaveLength(0);
   });

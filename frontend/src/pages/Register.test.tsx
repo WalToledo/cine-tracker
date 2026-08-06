@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Register from './Register'
-import { ApiError, authApi } from '../services/api'
+import { ApiError, authApi, getSessionUser } from '../services/api'
 import type { User } from '../services/api'
 
 const USER: User = {
@@ -31,7 +31,7 @@ function fillForm() {
   fireEvent.change(screen.getByLabelText('Apellidos'), { target: { value: 'Toledo' } })
   fireEvent.change(screen.getByLabelText('Nombre de usuario'), { target: { value: 'cinefila' } })
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'walter@example.com' } })
-  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'SuperSecret123' } })
+  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'SuperSecret123!' } })
 }
 
 describe('Register', () => {
@@ -53,10 +53,8 @@ describe('Register', () => {
     expect(screen.getByLabelText('Contraseña')).toBeInTheDocument()
   })
 
-  it('submits every field and stores the token', async () => {
-    const register = vi
-      .spyOn(authApi, 'register')
-      .mockResolvedValue({ user: USER, token: 'a.b.c' })
+  it('submits every field and stores the session user', async () => {
+    const register = vi.spyOn(authApi, 'register').mockResolvedValue({ user: USER })
 
     renderRegister()
     fillForm()
@@ -65,12 +63,13 @@ describe('Register', () => {
     expect(await screen.findByText('inicio')).toBeInTheDocument()
     expect(register).toHaveBeenCalledWith({
       email: 'walter@example.com',
-      password: 'SuperSecret123',
+      password: 'SuperSecret123!',
       firstName: 'Walter',
       lastName: 'Toledo',
       username: 'cinefila',
     })
-    expect(localStorage.getItem('cinetracker.token')).toBe('a.b.c')
+    // El token no se guarda: vive en la cookie httpOnly que emite el backend.
+    expect(getSessionUser()).toEqual(USER)
   })
 
   it('translates a taken username into spanish', async () => {

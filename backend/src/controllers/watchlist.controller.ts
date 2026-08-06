@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import prisma from "../lib/prisma";
-import { WatchStatus } from "../generated/prisma/enums";
+import type { AddMovieBody, UpdateStatusBody } from "../schemas/watchlist.schema";
 
 export async function getWatchlist(req: Request, res: Response) {
   const userId = req.user!.id;
@@ -13,17 +13,9 @@ export async function getWatchlist(req: Request, res: Response) {
   return res.status(200).json({ items });
 }
 
-export async function addMovie(req: Request, res: Response) {
+export async function addMovie(req: Request<never, unknown, AddMovieBody>, res: Response) {
   const userId = req.user!.id;
-  const { movieId, title, posterPath } = req.body ?? {};
-
-  if (typeof movieId !== "number" || !Number.isInteger(movieId)) {
-    return res.status(400).json({ error: "movieId must be an integer" });
-  }
-
-  if (typeof title !== "string" || title.trim() === "") {
-    return res.status(400).json({ error: "title is required" });
-  }
+  const { movieId, title, posterPath } = req.body;
 
   const existing = await prisma.watchlistItem.findUnique({
     where: { userId_movieId: { userId, movieId } },
@@ -34,25 +26,19 @@ export async function addMovie(req: Request, res: Response) {
   }
 
   const item = await prisma.watchlistItem.create({
-    data: {
-      userId,
-      movieId,
-      title,
-      posterPath: typeof posterPath === "string" ? posterPath : null,
-    },
+    data: { userId, movieId, title, posterPath },
   });
 
   return res.status(201).json({ item });
 }
 
-export async function updateStatus(req: Request<{ id: string }>, res: Response) {
+export async function updateStatus(
+  req: Request<{ id: string }, unknown, UpdateStatusBody>,
+  res: Response,
+) {
   const userId = req.user!.id;
   const { id } = req.params;
-  const { status } = req.body ?? {};
-
-  if (status !== WatchStatus.PENDING && status !== WatchStatus.WATCHED) {
-    return res.status(400).json({ error: "status must be PENDING or WATCHED" });
-  }
+  const { status } = req.body;
 
   const existing = await prisma.watchlistItem.findFirst({ where: { id, userId } });
   if (!existing) {

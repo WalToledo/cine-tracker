@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthForm from '../components/AuthForm'
 import type { AuthFormValues } from '../components/AuthForm'
-import { authApi, setToken } from '../services/api'
+import { authApi, saveSession } from '../services/api'
 import { translateError } from '../services/errors'
 
 function Register() {
@@ -15,8 +15,8 @@ function Register() {
 
   async function handleRegister(values: AuthFormValues) {
     try {
-      const { token } = await authApi.register(values)
-      setToken(token)
+      const { user } = await authApi.register(values)
+      saveSession(user)
       navigate(from, { replace: true })
     } catch (err) {
       throw new Error(translateError(err, 'No se pudo crear la cuenta'))
@@ -28,6 +28,7 @@ function Register() {
       title="Crear cuenta"
       submitLabel="Registrarme"
       withProfileFields
+      withPasswordRules
       onSubmit={handleRegister}
       footer={
         <>

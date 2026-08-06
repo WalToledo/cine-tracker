@@ -9,7 +9,7 @@ The project follows a simple Spec-Driven Development approach utilizing the Cont
 - **Backend:** Node.js, Express, TypeScript.
 - **Frontend:** React (built with Vite), TypeScript, Tailwind CSS.
 - **Database & ORM:** MySQL, Prisma.
-- **Authentication:** JWT (JSON Web Tokens).
+- **Authentication:** JWT (JSON Web Tokens), delivered in an `HttpOnly` cookie since Step 13.
 - **External API:** TMDB API (The Movie Database), consumed **server-side** through the `/api/movies` proxy since Step 6 — never from the browser.
 - **AI Integration:** Context7 MCP for extended context management and tooling in Claude Code.
 - **Testing:** Vitest (test runner for both workspaces), Supertest (backend API testing), React Testing Library (frontend component testing).
@@ -28,12 +28,22 @@ cinetracker/
 │   │   │   ├── user.controller.ts
 │   │   │   └── watchlist.controller.ts
 │   │   ├── lib/
+│   │   │   ├── auth-cookie.ts
 │   │   │   ├── env.ts
+│   │   │   ├── password.ts
 │   │   │   ├── prisma.ts
 │   │   │   └── user.ts
 │   │   ├── middlewares/
 │   │   │   ├── auth.middleware.ts
-│   │   │   └── error.middleware.ts
+│   │   │   ├── error.middleware.ts
+│   │   │   └── validate.middleware.ts
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   ├── common.schema.ts
+│   │   │   ├── movies.schema.ts
+│   │   │   ├── review.schema.ts
+│   │   │   ├── user.schema.ts
+│   │   │   └── watchlist.schema.ts
 │   │   ├── routes/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── movies.routes.ts
@@ -49,7 +59,9 @@ cinetracker/
 │   │   │   ├── auth.test.ts
 │   │   │   ├── globalSetup.ts
 │   │   │   ├── health.test.ts
+│   │   │   ├── helpers.ts
 │   │   │   ├── movies.test.ts
+│   │   │   ├── password.test.ts
 │   │   │   ├── reviews.test.ts
 │   │   │   ├── setup.ts
 │   │   │   ├── users.test.ts
@@ -61,10 +73,13 @@ cinetracker/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── AuthForm.tsx
+│   │   │   ├── AuthForm.test.tsx
 │   │   │   ├── Layout.tsx
 │   │   │   ├── MovieCard.tsx
 │   │   │   ├── Navbar.tsx
 │   │   │   ├── Navbar.test.tsx
+│   │   │   ├── PasswordStrength.tsx
+│   │   │   ├── PasswordStrength.test.tsx
 │   │   │   ├── ProtectedRoute.tsx
 │   │   │   ├── ReviewForm.tsx
 │   │   │   ├── ReviewList.tsx
@@ -88,6 +103,8 @@ cinetracker/
 │   │   ├── services/
 │   │   │   ├── api.ts
 │   │   │   ├── errors.ts
+│   │   │   ├── password.ts
+│   │   │   ├── password.test.ts
 │   │   │   ├── recentSearches.ts
 │   │   │   └── tmdb.ts
 │   │   ├── vitest.setup.ts
@@ -186,11 +203,11 @@ enum WatchStatus {
 - `POST /api/watchlist` respects the `@@unique([userId, movieId])` constraint (409 on duplicates).
 
 ### Step 4: Frontend Core (COMPLETED)
-- Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a token in `localStorage`.
-- Build Login/Register pages that persist the JWT in `localStorage` and redirect home.
+- Set up React Router (`react-router-dom` v7) with a shared layout + Navbar; `/watchlist` is protected by the presence of a stored session (see Step 13).
+- Build Login/Register pages that persist the session and redirect home.
 - Build Home page (fetch trending through the backend proxy — see Step 6).
 - Build Watchlist integration (list, toggle status, delete) against `/api/watchlist`.
-- `src/services/api.ts` centralizes fetch calls and attaches `Authorization: Bearer <token>` on every request.
+- `src/services/api.ts` centralizes fetch calls and carries the session credentials on every request.
 
 ### Step 5: Movie Detail Page & Reviews (COMPLETED)
 - **Database:** new `Review` model (migration `add_review_model`), one review per user and movie.
@@ -256,3 +273,39 @@ enum WatchStatus {
 - **Testing:** an optional root `.env.test` (see `.env.test.example`) points the backend suites at
   their own database, wired through the new `src/__tests__/setup.ts` and `globalSetup.ts`, and the
   suites now run serially.
+
+### Step 11: Input Validation & Password Policy (COMPLETED)
+- **Backend:** Zod validates every body and query through the new
+  `middlewares/validate.middleware.ts` and `schemas/` (auth, user, review, watchlist, movies);
+  `lib/user.ts` swaps its `parse*` helpers for schema factories.
+- **Backend:** the new `lib/password.ts` owns the register policy — 8+ characters with an
+  uppercase, a lowercase, a number and a special character. Login does not apply it, so
+  pre-Step-11 accounts keep working. Emails are now format-checked and lowercased.
+- **Frontend:** new `services/password.ts` and `components/PasswordStrength.tsx` (weak / normal /
+  strong bar plus requirement checklist); `AuthForm.tsx` gains the `withPasswordRules` prop and a
+  show/hide password toggle.
+- **Frontend:** `services/errors.ts` covers the new validation messages and `pages/Profile.tsx`
+  drops its duplicated translator.
+
+### Step 12: Password Change (PENDING)
+- **Backend:** new `PATCH /api/users/password` in `user.controller.ts` and `user.routes.ts`
+  (behind `requireAuth`), taking `{ currentPassword, newPassword }`. A wrong current password
+  answers **400**, not 401: the session is valid and a 401 would kick the user out to `/login`.
+- **Backend:** `schemas/user.schema.ts` gains `changePasswordSchema`, reusing `passwordSchema()`
+  from `lib/password.ts` for `newPassword` only — `currentPassword` is just checked as non-empty
+  so pre-Step-11 accounts can still authenticate themselves.
+- **Frontend:** a password section in `pages/Profile.tsx` with both fields, reusing
+  `components/PasswordStrength.tsx`; `services/api.ts` adds `usersApi.changePassword()`.
+- **Frontend:** `services/errors.ts` translates the new literals for a wrong current password and
+  for a new password that repeats the old one.
+
+### Step 13: Session Cookie (COMPLETED)
+- **Backend:** the JWT now travels in an `HttpOnly` cookie issued by the new
+  `lib/auth-cookie.ts`; `register` and `login` no longer return it in the body and
+  `requireAuth` reads the cookie instead of `Authorization: Bearer`.
+- **Backend:** new public `POST /api/auth/logout`, plus `cookie-parser` and a CORS `origin`
+  taken from the new optional `FRONTEND_URL` with `credentials: true`.
+- **Frontend:** `services/api.ts` swaps its token helpers for `saveSession` / `getSessionUser` /
+  `clearSession` over the `User` object, and `apiFetch` sends `credentials: 'include'`.
+- **Frontend:** `components/Navbar.tsx` calls `authApi.logout()` before clearing the local
+  session; `getCurrentUserId()` no longer decodes the JWT in the browser.

@@ -2,25 +2,14 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, Eye, Loader2, Pencil, Star } from 'lucide-react'
-import { ApiError, clearToken, usersApi } from '../services/api'
+import { ApiError, clearSession, usersApi } from '../services/api'
 import type { Profile as ProfileData, ProfileChanges } from '../services/api'
-
-// El backend responde en inglés; los mensajes de usuario van en español.
-const ERRORS: Record<string, string> = {
-  'username already taken': 'Ese nombre de usuario ya está en uso',
-}
-
-function translateError(err: unknown): string {
-  if (err instanceof ApiError && ERRORS[err.message]) {
-    return ERRORS[err.message]
-  }
-  return 'No se pudo guardar el perfil'
-}
+import { translateError } from '../services/errors'
 
 /**
- * Un 401 (token caducado) o un 404 (la cuenta ya no existe) dejan la sesión
- * inservible: hay que descartar el token y pedir login en vez de mostrar el
- * mensaje del backend.
+ * Un 401 (cookie caducada) o un 404 (la cuenta ya no existe) dejan la sesión
+ * inservible: hay que descartar el usuario guardado y pedir login en vez de
+ * mostrar el mensaje del backend.
  */
 function isDeadSession(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.status === 404)
@@ -44,7 +33,7 @@ function Profile() {
   const [saved, setSaved] = useState(false)
 
   function goToLogin() {
-    clearToken()
+    clearSession()
     navigate('/login', { state: { from: '/profile' } })
   }
 
@@ -59,7 +48,7 @@ function Profile() {
       .catch((err: unknown) => {
         if (!active) return
         if (isDeadSession(err)) {
-          clearToken()
+          clearSession()
           navigate('/login', { state: { from: '/profile' } })
           return
         }
@@ -113,7 +102,7 @@ function Profile() {
       if (isDeadSession(err)) {
         goToLogin()
       } else {
-        setSaveError(translateError(err))
+        setSaveError(translateError(err, 'No se pudo guardar el perfil'))
       }
     } finally {
       setSaving(false)
