@@ -29,6 +29,7 @@ function Register() {
       submitLabel="Registrarme"
       withProfileFields
       withPasswordRules
+      withFieldRules
       onSubmit={handleRegister}
       footer={
         <>

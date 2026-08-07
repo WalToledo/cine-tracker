@@ -18,6 +18,19 @@ function typePassword(value: string) {
   fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value } })
 }
 
+function type(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+}
+
+/** El formulario completo con valores que pasan todas las reglas del registro. */
+function fillRegister() {
+  type('Nombre', 'Walter')
+  type('Apellidos', 'Toledo')
+  type('Nombre de usuario', 'cinefila')
+  type('Email', 'walter@example.com')
+  typePassword('SuperSecret123!')
+}
+
 describe('AuthForm password rules', () => {
   it('hides the strength bar until something is typed', () => {
     renderForm({ withProfileFields: true, withPasswordRules: true })
@@ -74,5 +87,93 @@ describe('AuthForm password rules', () => {
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled()
+  })
+})
+
+describe('AuthForm field validation', () => {
+  const REGISTER_PROPS = {
+    withProfileFields: true,
+    withPasswordRules: true,
+    withFieldRules: true,
+  }
+
+  it('says nothing about a half-typed email until the field is left', () => {
+    renderForm(REGISTER_PROPS)
+    type('Email', 'walter@')
+
+    expect(screen.queryByText('Email no es válido')).not.toBeInTheDocument()
+
+    fireEvent.blur(screen.getByLabelText('Email'))
+
+    expect(screen.getByText('Email no es válido')).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('clears the warning as soon as the field becomes valid', () => {
+    renderForm(REGISTER_PROPS)
+    type('Email', 'walter@')
+    fireEvent.blur(screen.getByLabelText('Email'))
+
+    type('Email', 'walter@example.com')
+
+    expect(screen.queryByText('Email no es válido')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  it('does not submit an invalid form and points at the offending field', () => {
+    const onSubmit = vi.fn()
+    renderForm({ ...REGISTER_PROPS, onSubmit })
+    fillRegister()
+    // Sin blur: el aviso todavía no está pintado cuando se pulsa el botón.
+    type('Nombre de usuario', 'ci-nefila')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrarme' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Nombre de usuario')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Nombre de usuario')).toHaveFocus()
+  })
+
+  it('submits once everything is valid', () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderForm({ ...REGISTER_PROPS, onSubmit })
+    fillRegister()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrarme' }))
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      email: 'walter@example.com',
+      password: 'SuperSecret123!',
+      firstName: 'Walter',
+      lastName: 'Toledo',
+      username: 'cinefila',
+    })
+  })
+
+  /**
+   * La garantía de las cuentas anteriores al Step 11: el login sólo exige que los
+   * campos estén llenos. Si aplicara el patrón de email, una cuenta vieja cuyo
+   * email no lo pasara quedaría fuera para siempre.
+   */
+  it('lets login through with an email the register would reject', () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderForm({ title: 'Entrar', submitLabel: 'Entrar', onSubmit })
+    type('Email', 'walter@localhost')
+    typePassword('legacy1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(onSubmit).toHaveBeenCalled()
+  })
+
+  it('still blocks an empty login instead of calling the api', () => {
+    const onSubmit = vi.fn()
+    renderForm({ title: 'Entrar', submitLabel: 'Entrar', onSubmit })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Escribe tu email')).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveFocus()
   })
 })
