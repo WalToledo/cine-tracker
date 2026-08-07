@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import PasswordStrength from './PasswordStrength'
-import { MAX_LENGTH, MIN_LENGTH, checkPassword } from '../services/password'
+import { MAX_LENGTH, checkPassword } from '../services/password'
+import { validateAuthFields } from '../services/validation'
+import type { AuthField, AuthFieldErrors } from '../services/validation'
 
 export interface AuthFormValues {
   email: string
@@ -23,8 +25,33 @@ interface AuthFormProps {
    * debe seguir dejando entrar a las cuentas anteriores al Step 11.
    */
   withPasswordRules?: boolean
+  /**
+   * Ídem para el formato de email y usuario: el login sólo comprueba que los
+   * campos no estén vacíos. Una cuenta vieja cuyo email no pasara el patrón de
+   * hoy quedaría fuera para siempre si aquí se validara el formato.
+   */
+  withFieldRules?: boolean
   onSubmit: (values: AuthFormValues) => Promise<void>
   footer: ReactNode
+}
+
+/** Orden visual de los campos; decide a cuál salta el foco al fallar el envío. */
+const FIELD_ORDER: AuthField[] = ['firstName', 'lastName', 'username', 'email', 'password']
+
+/**
+ * No lleva `role="alert"`: el aviso ya viaja por el `aria-describedby` del input,
+ * y varias regiones `alert` a la vez se pisarían entre ellas y con el banner del
+ * servidor, que sí es un `alert`.
+ */
+function FieldError({ field, message }: { field: AuthField; message?: string }) {
+  if (!message) return null
+
+  return (
+    <p id={`${field}-error`} className="flex items-start gap-1.5 text-xs text-red-400">
+      <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {message}
+    </p>
+  )
 }
 
 function AuthForm({
@@ -32,6 +59,7 @@ function AuthForm({
   submitLabel,
   withProfileFields,
   withPasswordRules,
+  withFieldRules,
   onSubmit,
   footer,
 }: AuthFormProps) {
@@ -42,18 +70,51 @@ function AuthForm({
     lastName: '',
     username: '',
   })
+  /**
+   * Contiene exactamente los avisos que se están pintando, no todos los campos
+   * inválidos: un campo a medio escribir aún no ha fallado nada a ojos del
+   * usuario. Se llena al salir del campo y al enviar.
+   */
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   const blockedByPassword = Boolean(withPasswordRules) && !checkPassword(values.password).isValid
 
+  const options = { withProfileFields, withFieldRules }
+
   function update(field: keyof AuthFormValues, value: string) {
-    setValues((current) => ({ ...current, [field]: value }))
+    const next = { ...values, [field]: value }
+    setValues(next)
+
+    // Sólo se revalida lo que ya estaba en rojo, para que el aviso se borre en
+    // cuanto el campo se corrige sin empezar a acusar a los demás.
+    if (fieldErrors[field]) {
+      const message = validateAuthFields(next, options)[field]
+      setFieldErrors((current) => ({ ...current, [field]: message }))
+    }
+  }
+
+  function handleBlur(field: keyof AuthFormValues) {
+    const message = validateAuthFields(values, options)[field]
+    setFieldErrors((current) => ({ ...current, [field]: message }))
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    const found = validateAuthFields(values, options)
+    if (Object.keys(found).length > 0) {
+      setFieldErrors(found)
+      setError(null)
+      // Sin esto el usuario tendría que buscar a ojo cuál de los cinco campos
+      // se queja, que es justo lo que hacía bien el globo del navegador.
+      const first = FIELD_ORDER.find((field) => found[field])
+      if (first) document.getElementById(first)?.focus()
+      return
+    }
+
     setError(null)
     setSubmitting(true)
 
@@ -65,15 +126,31 @@ function AuthForm({
     }
   }
 
-  const inputClass =
-    'w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-amber-500'
+  // Las clases van literales enteras porque Tailwind analiza el código como texto
+  // y no ve las que se construyen interpolando.
+  const baseInputClass =
+    'w-full rounded-lg border bg-neutral-900 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-600'
   const labelClass = 'text-sm font-medium text-neutral-300'
+
+  function inputClass(field: keyof AuthFormValues) {
+    return fieldErrors[field]
+      ? `${baseInputClass} border-red-800 focus:border-red-500`
+      : `${baseInputClass} border-neutral-800 focus:border-amber-500`
+  }
+
+  /** `undefined` y no `''`: un `aria-describedby` vacío apunta a ninguna parte. */
+  function describedBy(field: keyof AuthFormValues, extra?: string) {
+    const ids = [fieldErrors[field] ? `${field}-error` : null, extra].filter(Boolean)
+    return ids.length > 0 ? ids.join(' ') : undefined
+  }
 
   return (
     <div className="mx-auto max-w-sm">
       <h2 className="mb-6 text-2xl font-bold text-white">{title}</h2>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {/* `noValidate` es lo que apaga los globos nativos del navegador: sin él
+          intercepta el envío antes de que React llegue a validar nada. */}
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         {withProfileFields && (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -84,14 +161,17 @@ function AuthForm({
                 <input
                   id="firstName"
                   type="text"
-                  required
                   maxLength={50}
                   autoComplete="given-name"
+                  aria-invalid={Boolean(fieldErrors.firstName)}
+                  aria-describedby={describedBy('firstName')}
                   value={values.firstName}
                   onChange={(event) => update('firstName', event.target.value)}
+                  onBlur={() => handleBlur('firstName')}
                   placeholder="Walter"
-                  className={inputClass}
+                  className={inputClass('firstName')}
                 />
+                <FieldError field="firstName" message={fieldErrors.firstName} />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -101,14 +181,17 @@ function AuthForm({
                 <input
                   id="lastName"
                   type="text"
-                  required
                   maxLength={50}
                   autoComplete="family-name"
+                  aria-invalid={Boolean(fieldErrors.lastName)}
+                  aria-describedby={describedBy('lastName')}
                   value={values.lastName}
                   onChange={(event) => update('lastName', event.target.value)}
+                  onBlur={() => handleBlur('lastName')}
                   placeholder="Toledo"
-                  className={inputClass}
+                  className={inputClass('lastName')}
                 />
+                <FieldError field="lastName" message={fieldErrors.lastName} />
               </div>
             </div>
 
@@ -119,18 +202,17 @@ function AuthForm({
               <input
                 id="username"
                 type="text"
-                required
-                minLength={3}
                 maxLength={30}
-                pattern="[A-Za-z0-9_]+"
-                // Sin `title` el navegador muestra un aviso de patrón indescifrable.
-                title="Sólo letras, números y guion bajo"
                 autoComplete="username"
+                aria-invalid={Boolean(fieldErrors.username)}
+                aria-describedby={describedBy('username')}
                 value={values.username}
                 onChange={(event) => update('username', event.target.value)}
+                onBlur={() => handleBlur('username')}
                 placeholder="cinefila"
-                className={inputClass}
+                className={inputClass('username')}
               />
+              <FieldError field="username" message={fieldErrors.username} />
             </div>
           </>
         )}
@@ -139,16 +221,21 @@ function AuthForm({
           <label htmlFor="email" className={labelClass}>
             Email
           </label>
+          {/* `type="email"` se queda por el teclado del móvil; con `noValidate`
+              ya no valida nada por su cuenta. */}
           <input
             id="email"
             type="email"
-            required
             autoComplete="email"
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={describedBy('email')}
             value={values.email}
             onChange={(event) => update('email', event.target.value)}
+            onBlur={() => handleBlur('email')}
             placeholder="tu@email.com"
-            className={inputClass}
+            className={inputClass('email')}
           />
+          <FieldError field="email" message={fieldErrors.email} />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -159,15 +246,18 @@ function AuthForm({
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              required
-              minLength={MIN_LENGTH}
               maxLength={MAX_LENGTH}
               autoComplete={withProfileFields ? 'new-password' : 'current-password'}
-              aria-describedby={withPasswordRules ? 'password-strength' : undefined}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={describedBy(
+                'password',
+                withPasswordRules ? 'password-strength' : undefined,
+              )}
               value={values.password}
               onChange={(event) => update('password', event.target.value)}
+              onBlur={() => handleBlur('password')}
               placeholder="••••••••"
-              className={`${inputClass} pr-10`}
+              className={`${inputClass('password')} pr-10`}
             />
             {/* `type="button"` es obligatorio: dentro de un form, un botón sin tipo lo envía. */}
             <button
@@ -183,6 +273,8 @@ function AuthForm({
               )}
             </button>
           </div>
+
+          <FieldError field="password" message={fieldErrors.password} />
 
           {/* Con el campo vacío no se pinta: recibir cinco cruces rojas al abrir
               el formulario es acusatorio y no ayuda a nadie. */}

@@ -72,7 +72,23 @@ npm run lint --workspace=frontend   # oxlint; sólo existe en frontend
   la vez, o la barra se pone verde sobre algo que el backend rechaza con un 400. Las dos tablas
   de casos gemelas de sus tests son la red.
 - El login **no** aplica la política de contraseñas, a propósito: las cuentas anteriores al Step
-  11 tienen contraseñas que ya no pasarían el registro y quedarían fuera para siempre.
+  11 tienen contraseñas que ya no pasarían el registro y quedarían fuera para siempre. Por el
+  mismo motivo tampoco valida el formato del email ni del usuario: el prop `withFieldRules` de
+  `AuthForm.tsx` sólo lo pasa `Register.tsx`, y en el login la validación se queda en "el campo
+  no está vacío".
+- `AuthForm.tsx` lleva `noValidate` a propósito: sin él el navegador intercepta el envío con sus
+  propios globos antes de que React llegue a validar, y por eso los inputs tampoco llevan
+  `required`, `pattern` ni `minLength`. Los avisos los pinta `services/validation.ts`, que es el
+  espejo de `schemas/auth.schema.ts` y `lib/user.ts` igual que `services/password.ts` lo es de
+  `lib/password.ts`. El patrón de email es el de `z.email()` de Zod 4 copiado literal: escribir
+  otro haría que el formulario acepte lo que el backend rechaza, o al revés. `services/errors.ts`
+  **importa** de ahí `EMAIL_ERROR` y `USERNAME_ERROR` en vez de copiarlos: son los dos avisos que
+  pueden llegar por el cliente o por el 400 del backend, y redactarlos dos veces los desalinea.
+- En `AuthForm.tsx` sólo el banner del servidor es `role="alert"`; los errores de campo se
+  anuncian con `aria-invalid` y `aria-describedby`. No es sólo accesibilidad: `Register.test.tsx`
+  y `Navbar.test.tsx` buscan el banner con `findByRole('alert')` **en singular**, y un segundo
+  `alert` en el DOM las rompe con un error de múltiples coincidencias que no menciona el cambio
+  que lo causó.
 - Las rutas literales van antes que las paramétricas en el mismo router: en
   `movies.routes.ts`, `/trending` y `/search` preceden a `/:id`.
 - Los tests del backend golpean MySQL de verdad; sólo `health.test.ts` y `movies.test.ts`
